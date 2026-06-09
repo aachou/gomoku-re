@@ -149,56 +149,75 @@ if tk is not None:
             tk.Button(footer, text='↻ 重新开始', command=self.build_start_screen, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='← 主菜单', command=self.build_start_screen, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
 
+        def _layout_changed(self, w, h):
+            cols = self.game.size
+            rows = self.game.size
+            cell_w = max(6, w // cols)
+            cell_h = max(6, h // rows)
+            new_cell_size = min(cell_w, cell_h)
+            board_w = new_cell_size * cols
+            board_h = new_cell_size * rows
+            new_ox = max(0, (w - board_w) // 2)
+            new_oy = max(0, (h - board_h) // 2)
+            if (new_cell_size != self.cell_size or new_ox != self.board_offset_x or new_oy != self.board_offset_y):
+                self.cell_size = new_cell_size
+                self.board_offset_x = new_ox
+                self.board_offset_y = new_oy
+                return True
+            return False
+
+        def _draw_grid(self):
+            cols = self.game.size
+            rows = self.game.size
+            board_w = self.cell_size * cols
+            board_h = self.cell_size * rows
+            self.canvas.create_rectangle(self.board_offset_x, self.board_offset_y, self.board_offset_x + board_w, self.board_offset_y + board_h, fill=self.board_bg, outline=self.accent_soft, width=2, tags='grid')
+            for i in range(1, cols):
+                x = self.board_offset_x + i * self.cell_size
+                self.canvas.create_line(x, self.board_offset_y + 2, x, self.board_offset_y + board_h - 2, fill='#94a3b8', tags='grid')
+            for j in range(1, rows):
+                y = self.board_offset_y + j * self.cell_size
+                self.canvas.create_line(self.board_offset_x + 2, y, self.board_offset_x + board_w - 2, y, fill='#94a3b8', tags='grid')
+
+        def _draw_stones(self):
+            radius = int(self.cell_size * 0.42)
+            highlight_radius = int(radius * 0.4)
+            for y in range(self.game.size):
+                for x in range(self.game.size):
+                    cell = self.game.board.get(x, y)
+                    if cell == 0:
+                        continue
+                    cx = self.board_offset_x + x * self.cell_size + self.cell_size // 2
+                    cy = self.board_offset_y + y * self.cell_size + self.cell_size // 2
+                    if cell == 1:
+                        self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill='#1f2937', outline='#64748b', width=1, tags='stone')
+                        self.canvas.create_oval(cx - highlight_radius, cy - highlight_radius, cx - highlight_radius + highlight_radius, cy - highlight_radius + highlight_radius, fill='#475569', outline='', tags='stone')
+                    elif cell == 2:
+                        self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill='#f8fafc', outline='#cbd5e1', width=1, tags='stone')
+                        self.canvas.create_oval(cx - highlight_radius, cy - highlight_radius, cx - highlight_radius + highlight_radius, cy - highlight_radius + highlight_radius, fill='#ffffff', outline='', tags='stone')
+
+        def _draw_highlights(self):
+            if self.waiting_replacement and self.game.player_types[self.game.current] == 'human':
+                for y in range(self.game.size):
+                    for x in range(self.game.size):
+                        if self.game.board.get(x, y) == 3 - self.game.current:
+                            x1 = self.board_offset_x + x * self.cell_size
+                            y1 = self.board_offset_y + y * self.cell_size
+                            self.canvas.create_rectangle(x1 + 2, y1 + 2, x1 + self.cell_size - 2, y1 + self.cell_size - 2, outline='#22c55e', width=3, tags='highlight')
+
         def draw_board(self):
             if not hasattr(self, 'canvas'):
                 return
             w = self.canvas.winfo_width()
             h = self.canvas.winfo_height()
-            cols = self.game.size
-            rows = self.game.size
-            if cols == 0 or rows == 0:
+            if w <= 1 or h <= 1:
                 return
-            cell_w = max(6, w // cols)
-            cell_h = max(6, h // rows)
-            self.cell_size = min(cell_w, cell_h)
-            self.canvas.delete('all')
-
-            board_w = self.cell_size * cols
-            board_h = self.cell_size * rows
-            self.board_offset_x = max(0, (w - board_w) // 2)
-            self.board_offset_y = max(0, (h - board_h) // 2)
-
-            self.canvas.create_rectangle(self.board_offset_x, self.board_offset_y, self.board_offset_x + board_w, self.board_offset_y + board_h, fill=self.board_bg, outline=self.accent_soft, width=2)
-            for i in range(1, cols):
-                x = self.board_offset_x + i * self.cell_size
-                self.canvas.create_line(x, self.board_offset_y + 2, x, self.board_offset_y + board_h - 2, fill='#94a3b8')
-            for j in range(1, rows):
-                y = self.board_offset_y + j * self.cell_size
-                self.canvas.create_line(self.board_offset_x + 2, y, self.board_offset_x + board_w - 2, y, fill='#94a3b8')
-
-            radius = int(self.cell_size * 0.42)
-            highlight_radius = int(radius * 0.4)
-            for y in range(rows):
-                for x in range(cols):
-                    cell = self.game.board.get(x, y)
-                    cx = self.board_offset_x + x * self.cell_size + self.cell_size // 2
-                    cy = self.board_offset_y + y * self.cell_size + self.cell_size // 2
-                    if cell == 1:
-                        self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill='#1f2937', outline='#64748b', width=1)
-                        self.canvas.create_oval(cx - highlight_radius, cy - highlight_radius, cx - highlight_radius + highlight_radius, cy - highlight_radius + highlight_radius, fill='#475569', outline='')
-                    elif cell == 2:
-                        self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill='#f8fafc', outline='#cbd5e1', width=1)
-                        self.canvas.create_oval(cx - highlight_radius, cy - highlight_radius, cx - highlight_radius + highlight_radius, cy - highlight_radius + highlight_radius, fill='#ffffff', outline='')
-
-            if self.waiting_replacement and self.game.player_types[self.game.current] == 'human':
-                for y in range(rows):
-                    for x in range(cols):
-                        if self.game.board.get(x, y) == 3 - self.game.current:
-                            x1 = self.board_offset_x + x * self.cell_size
-                            y1 = self.board_offset_y + y * self.cell_size
-                            self.canvas.create_rectangle(x1 + 2, y1 + 2, x1 + self.cell_size - 2, y1 + self.cell_size - 2, outline='#22c55e', width=3)
-
-            self.canvas.config(scrollregion=(0, 0, w, h))
+            if self._layout_changed(w, h):
+                self.canvas.delete('all')
+                self._draw_grid()
+            self.canvas.delete('stone', 'highlight')
+            self._draw_stones()
+            self._draw_highlights()
 
         def toggle_fullscreen(self):
             self.fullscreen = not self.fullscreen
@@ -223,22 +242,14 @@ if tk is not None:
                     self.perform_replacement(x, y)
                     self.update_ui()
             else:
-                if self.game.board.is_empty(x, y):
+                if self.game.board.is_empty(x, y) and self.game.supply[self.game.current] > 0:
                     self.perform_placement(x, y)
                     self.update_ui()
 
-        def on_cell_click(self, x, y):
-            if self.game.player_types[self.game.current] == 'ai':
-                return
-            if self.waiting_replacement:
-                if self.game.board.get(x, y) == 3 - self.game.current:
-                    self.perform_replacement(x, y)
-            else:
-                if self.game.board.is_empty(x, y):
-                    self.perform_placement(x, y)
-
         def perform_placement(self, x, y):
-            self.game.place_stone(x, y)
+            if not self.game.place_stone(x, y):
+                self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 没有棋子可下！')
+                return
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 放置 {chr(ord("A") + x)}{y + 1}。')
             line = self.game.line_after_placement(x, y)
             if line:

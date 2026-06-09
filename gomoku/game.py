@@ -10,10 +10,6 @@ PLAYER_NAMES = {1: '黑棋', 2: '白棋'}
 AI_LEVELS = ['simple', 'medium', 'hard']
 
 
-def clamp(value, minimum, maximum):
-    return max(minimum, min(maximum, value))
-
-
 class Board:
     def __init__(self, size=BOARD_SIZE):
         self.size = size
@@ -64,15 +60,6 @@ class Board:
                 index = coords.index((x, y))
                 start = max(0, min(index, len(coords) - 5))
                 return coords[start:start + 5]
-        return None
-
-    def find_any_line(self, player):
-        for y in range(self.size):
-            for x in range(self.size):
-                if self.get(x, y) == player:
-                    line = self.find_connected_line(x, y, player)
-                    if line:
-                        return line
         return None
 
     def remove_line(self, coords):
@@ -202,11 +189,17 @@ class Game:
     def opponent(self):
         return 3 - self.current
 
+    def _deduct_supply(self, player, amount=1):
+        self.supply[player] -= amount
+        if self.supply[player] < 0:
+            self.supply[player] = 0
+
     def place_stone(self, x, y):
+        if self.supply[self.current] <= 0:
+            return False
         self.board.set(x, y, self.current)
-        self.supply[self.current] -= 1
-        if self.supply[self.current] < 0:
-            self.supply[self.current] = 0
+        self._deduct_supply(self.current)
+        return True
 
     def line_after_placement(self, x, y):
         return self.board.find_connected_line(x, y, self.current)
@@ -221,13 +214,32 @@ class Game:
         return self.board.count_opponent_stones(self.current) > 0 and self.supply[self.current] > 0
 
     def apply_replacement(self, x, y):
-        self.supply[self.current] -= 1
-        if self.supply[self.current] < 0:
-            self.supply[self.current] = 0
+        self._deduct_supply(self.current)
         self.board.set(x, y, self.current)
 
-    def can_move(self, player):
-        return self.supply[player] > 0 and any(self.board.legal_moves())
+    def _handle_line_loop(self, x, y):
+        """Place stone at (x,y) then handle line/recovery/replacement loop.
+        Returns True if the turn ended naturally, False if the player lost."""
+        self.board.set(x, y, self.current)
+        self._deduct_supply(self.current)
+        while True:
+            line = self.board.find_connected_line(x, y, self.current)
+            if not line:
+                break
+            self.board.remove_line(line)
+            self.supply[self.current] += len(line)
+            if self.supply[self.current] <= 0 or self.board.count_opponent_stones(self.current) == 0:
+                break
+            if self.player_types[self.current] == 'human':
+                rep = self.input_replacement()
+            else:
+                rep = self.select_ai_replacement(self.current)
+            if rep is None:
+                break
+            rx, ry = rep
+            self.apply_replacement(rx, ry)
+            x, y = rx, ry
+        return not self.has_lost(self.current)
 
     def play(self):
         self.setup()
@@ -245,62 +257,14 @@ class Game:
                 x, y = self.select_ai_move(self.current)
                 print(f'AI({self.ai_levels[self.current]}) 选择 {chr(ord("A") + x)}{y + 1}')
 
-            self.execute_placement(x, y)
+            print(f'{PLAYER_NAMES[self.current]} 放置棋子: {chr(ord("A") + x)}{y + 1}')
+            self._handle_line_loop(x, y)
+
             if self.has_lost(self.current):
                 print(f'{PLAYER_NAMES[self.current]} 棋子用完，{PLAYER_NAMES[self.opponent()]} 获胜！')
                 break
 
             self.current = self.opponent()
-
-    def execute_placement(self, x, y):
-        self.board.set(x, y, self.current)
-        self.supply[self.current] -= 1
-        print(f'{PLAYER_NAMES[self.current]} 放置棋子: {chr(ord("A") + x)}{y + 1}')
-        if self.supply[self.current] < 0:
-            self.supply[self.current] = 0
-
-        if self.has_line_and_recover(x, y):
-            while True:
-                if self.supply[self.current] <= 0:
-                    break
-                replacement = self.choose_replacement()
-                if replacement is None:
-                    print('没有可替换的对方棋子，回合结束。')
-                    break
-                rx, ry = replacement
-                self.execute_replacement(rx, ry)
-                if self.has_lost(self.current):
-                    break
-                if not self.has_line_and_recover(rx, ry):
-                    print('替换后未连成五子，回合结束。')
-                    break
-        else:
-            if self.has_lost(self.current):
-                print(f'{PLAYER_NAMES[self.current]} 已无棋子可下。')
-
-    def has_line_and_recover(self, x, y):
-        line = self.board.find_connected_line(x, y, self.current)
-        if line:
-            self.board.remove_line(line)
-            recovered = len(line)
-            self.supply[self.current] += recovered
-            print(f'{PLAYER_NAMES[self.current]} 连成五子，回收 {recovered} 颗棋子，并可以替换一颗对方棋子。')
-            return True
-        return False
-
-    def choose_replacement(self):
-        if self.board.count_opponent_stones(self.current) == 0:
-            return None
-        if self.supply[self.current] <= 0:
-            return None
-        if self.player_types[self.current] == 'human':
-            return self.input_replacement()
-        return self.select_ai_replacement(self.current)
-
-    def execute_replacement(self, x, y):
-        self.supply[self.current] -= 1
-        self.board.set(x, y, self.current)
-        print(f'{PLAYER_NAMES[self.current]} 用一颗棋子替换了对方的棋子: {chr(ord("A") + x)}{y + 1}')
 
     def select_ai_move(self, player):
         level = self.ai_levels[player]
