@@ -7,7 +7,7 @@ except ImportError:
     tkfont = None
     messagebox = None
 
-from game import Game, PLAYER_NAMES, STARTING_STONES, BOARD_SIZE
+from .game import Game, PLAYER_NAMES, STARTING_STONES, BOARD_SIZE
 
 if tk is not None:
     class GameUI:
@@ -32,8 +32,9 @@ if tk is not None:
             self.starting_stones_var = tk.IntVar(value=STARTING_STONES)
             self.board_size_var = tk.IntVar(value=BOARD_SIZE)
             self.cell_font_size = 12
-            self.fullscreen = False
+            self.fullscreen = True
             self.buttons = []
+            self.root.attributes('-fullscreen', True)
             font_families = set(tkfont.families()) if tkfont is not None else set()
             preferred_fonts = ['Microsoft YaHei UI', 'Microsoft YaHei', 'SimHei', 'Segoe UI Variable', 'Segoe UI', 'Arial']
             self.ui_font = next((name for name in preferred_fonts if name in font_families), 'Arial')
@@ -96,6 +97,7 @@ if tk is not None:
             tk.Spinbox(fields, from_=5, to=99, textvariable=self.board_size_var, width=8, font=self.label_font, bd=0, relief='flat', bg=self.surface_bg, fg=self.text_main, insertbackground=self.text_main).grid(row=1, column=1, sticky='w', padx=6, pady=6)
 
             tk.Button(card, text='▶ START', command=self.start_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=14, bd=0).pack(pady=(18, 0), fill='x')
+            tk.Button(card, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground='#93c5fd', activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
             tk.Button(card, text='退出游戏', command=self.root.destroy, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
 
         def start_game(self):
