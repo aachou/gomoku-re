@@ -1,7 +1,6 @@
 import sys
 
-from game import Game
-from ui import GameUI
+from gomoku import Game, GameUI
 
 if __name__ == '__main__':
     if GameUI is not None and (len(sys.argv) == 1 or sys.argv[1] != 'cli'):
