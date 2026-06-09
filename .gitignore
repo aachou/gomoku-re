@@ -33,3 +33,6 @@ dist/
 # Temporary files
 *.tmp
 *.temp
+
+# Analysis documents
+ANALYSIS.md
