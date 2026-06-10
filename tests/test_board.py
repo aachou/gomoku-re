@@ -8,6 +8,8 @@ class TestBoard(unittest.TestCase):
         self.assertEqual(b.size, BOARD_SIZE)
         self.assertEqual(len(b._empty_cells), BOARD_SIZE * BOARD_SIZE)
         self.assertEqual(b._stone_count, [0, 0, 0])
+        self.assertEqual(len(b._player_cells[1]), 0)
+        self.assertEqual(len(b._player_cells[2]), 0)
         self.assertFalse(b.is_full())
 
     def test_set_and_get(self):
@@ -17,11 +19,14 @@ class TestBoard(unittest.TestCase):
         self.assertFalse(b.is_empty(7, 7))
         self.assertEqual(len(b._empty_cells), BOARD_SIZE * BOARD_SIZE - 1)
         self.assertEqual(b._stone_count[1], 1)
+        self.assertIn((7, 7), b._player_cells[1])
+        self.assertNotIn((7, 7), b._player_cells[2])
 
         b.set(7, 7, 0)
         self.assertTrue(b.is_empty(7, 7))
         self.assertEqual(len(b._empty_cells), BOARD_SIZE * BOARD_SIZE)
         self.assertEqual(b._stone_count[1], 0)
+        self.assertNotIn((7, 7), b._player_cells[1])
 
     def test_legal_moves(self):
         b = Board()
@@ -94,16 +99,23 @@ class TestBoard(unittest.TestCase):
         b.set(1, 0, 2)
         self.assertEqual(b.count_opponent_stones(1), 1)
         self.assertEqual(b.count_opponent_stones(2), 1)
+        self.assertEqual(len(b._player_cells[2]), 1)
+        self.assertEqual(len(b._player_cells[1]), 1)
 
     def test_clone(self):
         b = Board()
         b.set(7, 7, 1)
+        b.set(0, 0, 2)
         c = b.clone()
         self.assertEqual(c.get(7, 7), 1)
         self.assertEqual(len(c._empty_cells), len(b._empty_cells))
         self.assertEqual(c._stone_count, b._stone_count)
+        self.assertEqual(c._player_cells[1], b._player_cells[1])
+        self.assertEqual(c._player_cells[2], b._player_cells[2])
         c.set(7, 7, 2)
         self.assertEqual(b.get(7, 7), 1)
+        self.assertIn((7, 7), b._player_cells[1])
+        self.assertIn((7, 7), c._player_cells[2])
 
     def test_is_full(self):
         b = Board(5)
@@ -124,6 +136,9 @@ class TestBoard(unittest.TestCase):
         self.assertEqual(len(clone._empty_cells), 223)
         self.assertEqual(clone._stone_count[1], 1)
         self.assertEqual(clone._stone_count[2], 1)
+        self.assertIn((0, 0), clone._player_cells[1])
+        self.assertIn((1, 1), clone._player_cells[2])
+        self.assertNotIn((0, 0), clone._player_cells[2])
 
 
 if __name__ == '__main__':

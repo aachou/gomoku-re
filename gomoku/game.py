@@ -1,4 +1,6 @@
-from typing import Dict, List, NamedTuple, Optional
+import json
+import os
+from typing import Any, Dict, List, NamedTuple, Optional
 
 from .board import Board, BOARD_SIZE
 
@@ -10,6 +12,42 @@ class PlacementResult(NamedTuple):
 
 STARTING_STONES = 30
 PLAYER_NAMES = {1: '黑棋', 2: '白棋'}
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), '..', 'gomoku_config.json')
+DEFAULT_CONFIG = {
+    'ai_level': 'medium',
+    'board_size': 15,
+    'starting_stones': 30,
+    'ai_delay_ms': 300,
+}
+
+
+def save_config(**kwargs):
+    config = DEFAULT_CONFIG.copy()
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE) as f:
+                config.update(json.load(f))
+    except Exception:
+        pass
+    config.update(kwargs)
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f)
+    except Exception:
+        pass
+
+
+def load_config() -> dict:
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE) as f:
+                data = json.load(f)
+            result = DEFAULT_CONFIG.copy()
+            result.update(data)
+            return result
+    except Exception:
+        pass
+    return dict(DEFAULT_CONFIG)
 
 
 class Game:
@@ -21,6 +59,26 @@ class Game:
         self.player_types: Dict[int, str] = {1: 'human', 2: 'human'}
         self.ai_levels: Dict[int, Optional[str]] = {1: None, 2: None}
         self._history: List[dict] = []
+        self.move_log: List[dict] = []
+        self.timers: Dict[int, float] = {1: 0.0, 2: 0.0}
+        self._turn_start: float = 0.0
+
+    def start_turn_timer(self):
+        import time
+        self._turn_start = time.time()
+
+    def stop_turn_timer(self):
+        import time
+        self.timers[self.current] += time.time() - self._turn_start
+
+    def log_move(self, action: str, x: int, y: int, recovered: int = 0):
+        self.move_log.append({
+            'player': self.current,
+            'action': action,
+            'x': x,
+            'y': y,
+            'recovered': recovered,
+        })
 
     def save_snapshot(self):
         self._history.append({
@@ -37,6 +95,8 @@ class Game:
         self.board._rebuild_cache()
         self.supply = snap['supply'].copy()
         self.current = snap['current']
+        if self.move_log:
+            self.move_log.pop()
         return True
 
     def serialize(self) -> dict:
@@ -47,6 +107,7 @@ class Game:
             'current': self.current,
             'player_types': [self.player_types[1], self.player_types[2]],
             'ai_levels': [self.ai_levels[1], self.ai_levels[2]],
+            'move_log': self.move_log,
         }
 
     @classmethod
@@ -60,10 +121,14 @@ class Game:
         game.current = data['current']
         game.player_types = {1: data['player_types'][0], 2: data['player_types'][1]}
         game.ai_levels = {1: data['ai_levels'][0], 2: data['ai_levels'][1]}
+        game.move_log = data.get('move_log', [])
         return game
 
     def has_lost(self, player):
         return self.supply[player] <= 0
+
+    def is_draw(self):
+        return self.board.is_full() and not self.has_lost(1) and not self.has_lost(2)
 
     def opponent(self):
         return 3 - self.current

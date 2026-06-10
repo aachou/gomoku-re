@@ -147,6 +147,60 @@ class TestGame(unittest.TestCase):
         self.assertTrue(g.board.is_empty(7, 7))
         self.assertEqual(g.current, 1)
 
+    def test_recovery_chain(self):
+        g = Game(size=15, starting_stones=30)
+        for x in range(4):
+            g.place_stone(x, 0)
+        g.current = 2
+        for x in range(4):
+            g.place_stone(x, 1)
+        g.current = 1
+        g.place_stone(4, 0)
+        result = g.process_stone_placement(4, 0)
+        self.assertEqual(result.result, 'recovered')
+        self.assertEqual(result.recovered, 5)
+        self.assertTrue(result.can_replace)
+        self.assertEqual(g.supply[1], 30)
+        self.assertTrue(g.apply_replacement(3, 1))
+        self.assertEqual(g.supply[1], 29)
+        r2 = g.process_stone_placement(3, 1)
+        self.assertEqual(r2.result, 'no_line')
+
+    def test_process_no_line(self):
+        g = Game(size=15, starting_stones=30)
+        g.place_stone(7, 7)
+        result = g.process_stone_placement(7, 7)
+        self.assertEqual(result.result, 'no_line')
+        self.assertIsNone(result.recovered)
+        self.assertFalse(result.can_replace)
+
+    def test_is_draw_false(self):
+        g = Game()
+        self.assertFalse(g.is_draw())
+
+    def test_is_draw_true(self):
+        g = Game(size=5, starting_stones=25)
+        g.supply = {1: 13, 2: 12}
+        for y in range(5):
+            for x in range(5):
+                g.board.set(x, y, 1 if (x + y) % 2 == 0 else 2)
+        g.board._rebuild_cache()
+        self.assertTrue(g.is_draw())
+
+    def test_undo_after_replacement(self):
+        g = Game(starting_stones=30)
+        g.place_stone(7, 7)
+        g.current = 2
+        g.place_stone(7, 8)
+        g.current = 1
+        g.save_snapshot()
+        g.apply_replacement(7, 8)
+        self.assertEqual(g.board.get(7, 8), 1)
+        self.assertEqual(g.supply[1], 28)
+        self.assertTrue(g.undo())
+        self.assertEqual(g.board.get(7, 8), 2)
+        self.assertEqual(g.supply[1], 29)
+
 
 if __name__ == '__main__':
     unittest.main()

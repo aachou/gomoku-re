@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from typing import Optional, Tuple
 
@@ -6,7 +7,7 @@ from .ai import select_ai_move, select_ai_replacement
 from .game import Game, PLAYER_NAMES, STARTING_STONES
 from .board import Board, BOARD_SIZE
 
-SAVE_FILE = 'gomoku_save.json'
+SAVE_FILE = os.path.join(os.path.dirname(__file__), '..', 'gomoku_save.json')
 
 
 def setup(game: Game):
@@ -219,6 +220,10 @@ def play(game: Game):
 
         game.board.render()
         print(f'{PLAYER_NAMES[1]}：{game.supply[1]} 颗    {PLAYER_NAMES[2]}：{game.supply[2]} 颗')
+
+        if game.is_draw():
+            print('棋盘已满，平局！')
+            break
 
         game.save_snapshot()
 

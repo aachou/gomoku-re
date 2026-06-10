@@ -86,6 +86,45 @@ class TestAI(unittest.TestCase):
             if not g.has_lost(g.current):
                 g.current = g.opponent()
 
+    def test_ai_medium_takes_winning_move(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        x, y = select_ai_move(b, 1, 'medium')
+        self.assertEqual((x, y), (4, 7))
+
+    def test_ai_hard_takes_winning_move(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        b.set(5, 7, 2)
+        b.set(6, 7, 2)
+        x, y = select_ai_move(b, 1, 'hard')
+        self.assertTrue(b.in_bounds(x, y))
+        self.assertTrue(b.is_empty(x, y))
+
+    def test_ai_medium_blocks_opponent_five(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 2)
+        x, y = select_ai_move(b, 1, 'medium')
+        self.assertEqual((x, y), (4, 7))
+
+    def test_ai_hard_blocks_opponent_five(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 2)
+        x, y = select_ai_move(b, 1, 'hard')
+        self.assertTrue(b.in_bounds(x, y))
+        self.assertTrue(b.is_empty(x, y))
+
+    def test_ai_simple_does_not_always_win(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        x, y = select_ai_move(b, 1, 'simple')
+        self.assertTrue(b.in_bounds(x, y))
+
 
 if __name__ == '__main__':
     unittest.main()

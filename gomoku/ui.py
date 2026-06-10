@@ -7,7 +7,9 @@ except ImportError:
     tkfont = None
     messagebox = None
 
-from .game import Game, PLAYER_NAMES, STARTING_STONES
+import time
+
+from .game import Game, PLAYER_NAMES, STARTING_STONES, save_config, load_config
 from .board import BOARD_SIZE
 from .ai import select_ai_move, select_ai_replacement
 
@@ -28,16 +30,26 @@ if tk is not None:
             self.game = Game()
             self.waiting_replacement = False
             self.game_over = False
+            self.last_move = None
             self.mode_var = tk.StringVar(value='pvp')
             self.side_var = tk.StringVar(value='1')
             self.level_var = tk.StringVar(value='medium')
             self.status_var = tk.StringVar()
             self.starting_stones_var = tk.IntVar(value=STARTING_STONES)
             self.board_size_var = tk.IntVar(value=BOARD_SIZE)
+            self.ai_delay_var = tk.IntVar(value=300)
             self.board_offset_x = 0
             self.board_offset_y = 0
             self.fullscreen = True
+            self._windowed_geometry = None
+            self._paused = False
+            self._timer_job = None
             self.buttons = []
+            config = load_config()
+            self.level_var.set(config.get('ai_level', 'medium'))
+            self.board_size_var.set(config.get('board_size', 15))
+            self.starting_stones_var.set(config.get('starting_stones', 30))
+            self.ai_delay_var.set(config.get('ai_delay_ms', 300))
             self.root.attributes('-fullscreen', True)
             font_families = set(tkfont.families()) if tkfont is not None else set()
             preferred_fonts = ['Microsoft YaHei UI', 'Microsoft YaHei', 'SimHei', 'Segoe UI Variable', 'Segoe UI', 'Arial']
@@ -47,8 +59,12 @@ if tk is not None:
             self.label_font = tkfont.Font(family=self.ui_font, size=12)
             self.button_font = tkfont.Font(family=self.ui_font, size=11, weight='bold')
             self.status_font = tkfont.Font(family=self.ui_font, size=12)
+            self.small_font = tkfont.Font(family=self.ui_font, size=10)
             self.root.configure(bg=self.bg_color)
             self.root.option_add('*Font', self.label_font)
+            self.root.bind('<Control-z>', lambda e: self.perform_undo())
+            self.root.bind('<F11>', lambda e: self.toggle_fullscreen())
+            self.root.bind('<Escape>', lambda e: self.build_start_screen())
             self.build_start_screen()
 
         def build_start_screen(self):
@@ -123,6 +139,14 @@ if tk is not None:
 
             self.waiting_replacement = False
             self.game_over = False
+            self.last_move = None
+            self._paused = False
+            save_config(
+                ai_level=self.level_var.get(),
+                board_size=size,
+                starting_stones=starting,
+                ai_delay_ms=self.ai_delay_var.get(),
+            )
             self.build_game_ui()
             self.update_ui()
 
@@ -133,30 +157,74 @@ if tk is not None:
             for widget in self.root.winfo_children():
                 widget.destroy()
 
-            header_frame = tk.Frame(self.root, bg=self.bg_color, pady=16, padx=18)
-            header_frame.pack(fill='x')
-            self.current_label = tk.Label(header_frame, font=self.header_font, bg=self.bg_color, fg=self.text_main)
+            top_frame = tk.Frame(self.root, bg=self.bg_color, pady=12, padx=18)
+            top_frame.pack(fill='x')
+
+            self.current_label = tk.Label(top_frame, font=self.header_font, bg=self.bg_color, fg=self.text_main)
             self.current_label.pack(side='left')
-            self.supply_label = tk.Label(header_frame, font=self.label_font, bg=self.bg_color, fg=self.text_secondary)
+            self.supply_label = tk.Label(top_frame, font=self.label_font, bg=self.bg_color, fg=self.text_secondary)
             self.supply_label.pack(side='left', padx=24)
+            self.timer_label = tk.Label(top_frame, font=self.label_font, bg=self.bg_color, fg=self.text_secondary)
+            self.timer_label.pack(side='right', padx=10)
 
-            self.status_label = tk.Label(self.root, textvariable=self.status_var, font=self.status_font, bg=self.surface_bg, fg=self.text_main, wraplength=760, justify='left', bd=0, relief='flat', padx=18, pady=14)
-            self.status_label.pack(fill='x', pady=(0, 10), padx=16)
+            center_frame = tk.Frame(self.root, bg=self.bg_color)
+            center_frame.pack(fill='both', expand=True, padx=16)
 
-            board_frame = tk.Frame(self.root, bg=self.panel_bg, bd=0, highlightthickness=1, highlightbackground='#cbd5e1')
-            board_frame.pack(fill='both', expand=True, padx=16, pady=8)
+            board_container = tk.Frame(center_frame, bg=self.panel_bg, bd=0, highlightthickness=1, highlightbackground='#cbd5e1')
+            board_container.pack(side='left', fill='both', expand=True)
 
-            self.canvas = tk.Canvas(board_frame, bg=self.board_bg, highlightthickness=0)
+            self.canvas = tk.Canvas(board_container, bg=self.board_bg, highlightthickness=0)
             self.canvas.pack(fill='both', expand=True)
             self.canvas.bind('<Button-1>', self.on_canvas_click)
             self.canvas.bind('<Configure>', lambda e: self.draw_board())
             self.cell_size = 24
 
+            side_panel = tk.Frame(center_frame, bg=self.card_bg, bd=0, highlightthickness=1, highlightbackground='#cbd5e1', width=220)
+            side_panel.pack(side='right', fill='y', padx=(8, 0))
+            side_panel.pack_propagate(False)
+
+            tk.Label(side_panel, text='步数历史', font=self.header_font, bg=self.card_bg, fg=self.text_main).pack(pady=(10, 4))
+
+            log_frame = tk.Frame(side_panel, bg=self.card_bg)
+            log_frame.pack(fill='both', expand=True, padx=8, pady=4)
+            self.log_listbox = tk.Listbox(log_frame, font=self.small_font, bg=self.surface_bg, fg=self.text_main, bd=0, highlightthickness=0, selectbackground=self.accent_soft)
+            log_scroll = tk.Scrollbar(log_frame, orient='vertical', command=self.log_listbox.yview)
+            self.log_listbox.configure(yscrollcommand=log_scroll.set)
+            log_scroll.pack(side='right', fill='y')
+            self.log_listbox.pack(fill='both', expand=True)
+
+            ctrl_frame = tk.Frame(side_panel, bg=self.card_bg)
+            ctrl_frame.pack(fill='x', padx=8, pady=8)
+            tk.Label(ctrl_frame, text='AI 速度', font=self.small_font, bg=self.card_bg, fg=self.text_secondary).pack(anchor='w')
+            speed_scale = tk.Scale(ctrl_frame, from_=50, to=2000, orient='horizontal', variable=self.ai_delay_var, font=self.small_font, bg=self.surface_bg, fg=self.text_main, bd=0, highlightthickness=0, showvalue=False)
+            speed_scale.pack(fill='x')
+            self.speed_label = tk.Label(ctrl_frame, text='', font=self.small_font, bg=self.card_bg, fg=self.text_secondary)
+            self.speed_label.pack()
+            self._update_speed_label()
+
+            self.pause_btn = tk.Button(ctrl_frame, text='⏸ 暂停', command=self.toggle_pause, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', bd=0)
+            self.pause_btn.pack(fill='x', pady=(6, 0))
+
+            self.status_label = tk.Label(self.root, textvariable=self.status_var, font=self.status_font, bg=self.surface_bg, fg=self.text_main, wraplength=760, justify='left', bd=0, relief='flat', padx=18, pady=14)
+            self.status_label.pack(fill='x', pady=(0, 10), padx=16)
+
             footer = tk.Frame(self.root, bg=self.bg_color, pady=14)
             footer.pack(fill='x')
-            tk.Button(footer, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+            tk.Button(footer, text='↶ 悔棋', command=self.perform_undo, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+            tk.Button(footer, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='↻ 重新开始', command=self.build_start_screen, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='← 主菜单', command=self.build_start_screen, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+
+        def _update_speed_label(self):
+            val = self.ai_delay_var.get()
+            self.speed_label.config(text=f'{"慢" if val > 1000 else "中" if val > 300 else "快"} ({val}ms)')
+
+        def toggle_pause(self):
+            self._paused = not self._paused
+            self.pause_btn.config(text='▶ 继续' if self._paused else '⏸ 暂停')
+            if not self._paused:
+                if self.game.player_types[self.game.current] == 'ai' and not self.waiting_replacement and not self.game_over:
+                    self.root.after(100, self.ai_take_turn)
 
         def _layout_changed(self, w, h):
             cols = self.game.size
@@ -213,15 +281,19 @@ if tk is not None:
                     elif cell == 2:
                         self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill='#f8fafc', outline='#cbd5e1', width=1, tags='stone')
                         self.canvas.create_oval(cx - radius, cy - radius, cx - radius + 2 * highlight_radius, cy - radius + 2 * highlight_radius, fill='#ffffff', outline='', tags='stone')
+            if self.last_move is not None:
+                lx, ly = self.last_move
+                cx = self.board_offset_x + lx * self.cell_size + self.cell_size // 2
+                cy = self.board_offset_y + ly * self.cell_size + self.cell_size // 2
+                self.canvas.create_oval(cx - radius - 2, cy - radius - 2, cx + radius + 2, cy + radius + 2, outline='#ef4444', width=2, tags='stone')
 
         def _draw_highlights(self):
             if self.waiting_replacement and self.game.player_types[self.game.current] == 'human':
-                for y in range(self.game.size):
-                    for x in range(self.game.size):
-                        if self.game.board.get(x, y) == 3 - self.game.current:
-                            x1 = self.board_offset_x + x * self.cell_size
-                            y1 = self.board_offset_y + y * self.cell_size
-                            self.canvas.create_rectangle(x1 + 2, y1 + 2, x1 + self.cell_size - 2, y1 + self.cell_size - 2, outline='#22c55e', width=3, tags='highlight')
+                opponent = 3 - self.game.current
+                for x, y in self.game.board._player_cells[opponent]:
+                    x1 = self.board_offset_x + x * self.cell_size
+                    y1 = self.board_offset_y + y * self.cell_size
+                    self.canvas.create_rectangle(x1 + 2, y1 + 2, x1 + self.cell_size - 2, y1 + self.cell_size - 2, outline='#22c55e', width=3, tags='highlight')
 
         def draw_board(self):
             if not hasattr(self, 'canvas'):
@@ -239,14 +311,45 @@ if tk is not None:
 
         def toggle_fullscreen(self):
             self.fullscreen = not self.fullscreen
-            self.root.attributes('-fullscreen', self.fullscreen)
+            if self.fullscreen:
+                self._windowed_geometry = self.root.geometry()
+                self.root.attributes('-fullscreen', True)
+            else:
+                self.root.attributes('-fullscreen', False)
+                if self._windowed_geometry:
+                    self.root.geometry(self._windowed_geometry)
+
+        def _format_time(self, seconds):
+            m = int(seconds // 60)
+            s = int(seconds % 60)
+            return f'{m:02d}:{s:02d}'
+
+        def _update_timer_display(self):
+            t1 = self._format_time(self.game.timers[1])
+            t2 = self._format_time(self.game.timers[2])
+            self.timer_label.config(text=f'黑 {t1}  白 {t2}')
 
         def update_ui(self):
             self.draw_board()
             self.current_label.config(text=f'当前: {PLAYER_NAMES[self.game.current]}')
             self.supply_label.config(text=f'黑棋: {self.game.supply[1]}  白棋: {self.game.supply[2]}')
+            self._update_timer_display()
             if not self.waiting_replacement:
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 请落子。')
+
+        def _refresh_log(self):
+            self.log_listbox.delete(0, 'end')
+            for entry in self.game.move_log:
+                p = PLAYER_NAMES[entry['player']]
+                pos = f'{chr(ord("A") + entry["x"])}{entry["y"] + 1}'
+                if entry['action'] == 'place':
+                    text = f'{p} 落子 {pos}'
+                    if entry['recovered']:
+                        text += f' 回收{entry["recovered"]}'
+                else:
+                    text = f'{p} 替换 {pos}'
+                self.log_listbox.insert('end', text)
+            self.log_listbox.see('end')
 
         def on_canvas_click(self, event):
             if self.game_over or self.game.player_types[self.game.current] == 'ai':
@@ -264,12 +367,29 @@ if tk is not None:
                     self.perform_placement(x, y)
                     self.update_ui()
 
+        def perform_undo(self):
+            if not self.game.undo():
+                return
+            self.waiting_replacement = False
+            self.game_over = False
+            self.last_move = None
+            self.update_ui()
+            self._refresh_log()
+            self.status_var.set('已悔棋。')
+            if self.game.player_types[self.game.current] == 'ai':
+                self.root.after(300, self.ai_take_turn)
+
         def perform_placement(self, x, y):
+            self.game.save_snapshot()
+            self.game.start_turn_timer()
             if not self.game.place_stone(x, y):
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 没有棋子可下！')
                 return
+            self.last_move = (x, y)
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 放置 {chr(ord("A") + x)}{y + 1}。')
-            result, _, can_replace = self.game.process_stone_placement(x, y)
+            result, recovered, can_replace = self.game.process_stone_placement(x, y)
+            self.game.log_move('place', x, y, recovered or 0)
+            self._refresh_log()
             if result == 'recovered':
                 if can_replace:
                     self.waiting_replacement = True
@@ -280,11 +400,15 @@ if tk is not None:
             self.conclude_turn()
 
         def perform_replacement(self, x, y):
+            self.game.save_snapshot()
             if not self.game.apply_replacement(x, y):
                 return
+            self.last_move = (x, y)
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 替换了 {chr(ord("A") + x)}{y + 1}。')
             self.waiting_replacement = False
-            result, _, can_replace = self.game.process_stone_placement(x, y)
+            result, recovered, can_replace = self.game.process_stone_placement(x, y)
+            self.game.log_move('replace', x, y, recovered or 0)
+            self._refresh_log()
             if result == 'recovered':
                 if can_replace:
                     self.waiting_replacement = True
@@ -295,25 +419,34 @@ if tk is not None:
             self.conclude_turn()
 
         def conclude_turn(self):
+            self.game.stop_turn_timer()
             self.update_ui()
             if self.game.has_lost(self.game.current):
                 self.game_over = True
                 messagebox.showinfo('游戏结束', f'{PLAYER_NAMES[self.game.current]} 棋子用完，{PLAYER_NAMES[self.game.opponent()]} 胜利！')
                 return
+            if self.game.is_draw():
+                self.game_over = True
+                messagebox.showinfo('游戏结束', '棋盘已满，平局！')
+                return
             self.game.current = self.game.opponent()
             self.waiting_replacement = False
             self.update_ui()
             if self.game.player_types[self.game.current] == 'ai':
-                self.root.after(300, self.ai_take_turn)
+                delay = self.ai_delay_var.get()
+                self.root.after(delay, self.ai_take_turn)
 
         def ai_take_turn(self):
+            if self._paused or self.game_over:
+                return
             if self.waiting_replacement:
                 replacement = select_ai_replacement(self.game.board, self.game.current, self.game.ai_levels[self.game.current])
                 if replacement:
                     x, y = replacement
                     self.perform_replacement(x, y)
                     if self.waiting_replacement:
-                        self.root.after(300, self.ai_take_turn)
+                        delay = self.ai_delay_var.get()
+                        self.root.after(delay, self.ai_take_turn)
                     return
                 self.waiting_replacement = False
                 self.conclude_turn()
@@ -326,7 +459,8 @@ if tk is not None:
             x, y = move
             self.perform_placement(x, y)
             if self.waiting_replacement:
-                self.root.after(300, self.ai_take_turn)
+                delay = self.ai_delay_var.get()
+                self.root.after(delay, self.ai_take_turn)
 
         def run(self):
             self.root.mainloop()
