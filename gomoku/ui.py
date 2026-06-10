@@ -13,20 +13,32 @@ from .game import Game, PLAYER_NAMES, STARTING_STONES, save_config, load_config
 from .board import BOARD_SIZE
 from .ai import select_ai_move, select_ai_replacement
 
+THEMES = {
+    '默认': {
+        'bg_color': '#e2e8f0', 'card_bg': '#f1f5f9', 'surface_bg': '#f1f5f9',
+        'panel_bg': '#e2e8f0', 'board_bg': '#d6d9e6', 'accent': '#3b82f6',
+        'accent_soft': '#93c5fd', 'text_main': '#0f172a', 'text_secondary': '#475569',
+    },
+    '森林': {
+        'bg_color': '#d4e6c3', 'card_bg': '#e8f5e1', 'surface_bg': '#e8f5e1',
+        'panel_bg': '#d4e6c3', 'board_bg': '#c8dbb5', 'accent': '#2d7d46',
+        'accent_soft': '#81c784', 'text_main': '#1a3d2b', 'text_secondary': '#3e6b4e',
+    },
+    '暖阳': {
+        'bg_color': '#fce4c8', 'card_bg': '#fff3e0', 'surface_bg': '#fff3e0',
+        'panel_bg': '#fce4c8', 'board_bg': '#f5dcc3', 'accent': '#d4783b',
+        'accent_soft': '#f0b27a', 'text_main': '#3e2723', 'text_secondary': '#6d4c41',
+    },
+}
+
 if tk is not None:
     class GameUI:
         def __init__(self):
             self.root = tk.Tk()
             self.root.title('不一样的五子棋')
-            self.bg_color = '#e2e8f0'
-            self.card_bg = '#f1f5f9'
-            self.surface_bg = '#f1f5f9'
-            self.panel_bg = '#e2e8f0'
-            self.board_bg = '#d6d9e6'
-            self.accent = '#3b82f6'
-            self.accent_soft = '#93c5fd'
-            self.text_main = '#0f172a'
-            self.text_secondary = '#475569'
+            config = load_config()
+            self._theme_name = config.get('theme', '默认')
+            self._apply_theme()
             self.game = Game()
             self.waiting_replacement = False
             self.game_over = False
@@ -34,6 +46,7 @@ if tk is not None:
             self.mode_var = tk.StringVar(value='pvp')
             self.side_var = tk.StringVar(value='1')
             self.level_var = tk.StringVar(value='medium')
+            self.theme_var = tk.StringVar(value=self._theme_name)
             self.status_var = tk.StringVar()
             self.starting_stones_var = tk.IntVar(value=STARTING_STONES)
             self.board_size_var = tk.IntVar(value=BOARD_SIZE)
@@ -44,8 +57,8 @@ if tk is not None:
             self._windowed_geometry = None
             self._paused = False
             self._timer_job = None
+            self._hotkeys_shown = False
             self.buttons = []
-            config = load_config()
             self.level_var.set(config.get('ai_level', 'medium'))
             self.board_size_var.set(config.get('board_size', 15))
             self.starting_stones_var.set(config.get('starting_stones', 30))
@@ -65,7 +78,54 @@ if tk is not None:
             self.root.bind('<Control-z>', lambda e: self.perform_undo())
             self.root.bind('<F11>', lambda e: self.toggle_fullscreen())
             self.root.bind('<Escape>', lambda e: self.build_start_screen())
+            self.root.bind('<Key-slash>', lambda e: self._toggle_hotkeys())
+            self.root.bind('<Key-question>', lambda e: self._toggle_hotkeys())
             self.build_start_screen()
+
+        def _apply_theme(self, theme_name=None):
+            if theme_name:
+                self._theme_name = theme_name
+            colors = THEMES.get(self._theme_name, THEMES['默认'])
+            self.bg_color = colors['bg_color']
+            self.card_bg = colors['card_bg']
+            self.surface_bg = colors['surface_bg']
+            self.panel_bg = colors['panel_bg']
+            self.board_bg = colors['board_bg']
+            self.accent = colors['accent']
+            self.accent_soft = colors['accent_soft']
+            self.text_main = colors['text_main']
+            self.text_secondary = colors['text_secondary']
+
+        def _toggle_hotkeys(self):
+            self._hotkeys_shown = not self._hotkeys_shown
+            if self._hotkeys_shown:
+                self._show_hotkeys()
+            else:
+                self._hide_hotkeys()
+
+        def _show_hotkeys(self):
+            self._hide_hotkeys()
+            self._hotkey_frame = tk.Frame(self.root, bg=self.card_bg, bd=1, relief='solid', highlightbackground=self.accent, highlightthickness=2)
+            self._hotkey_frame.place(relx=0.5, rely=0.5, anchor='center')
+            tk.Label(self._hotkey_frame, text='快捷键', font=self.header_font, bg=self.card_bg, fg=self.text_main).pack(pady=(10, 4), padx=20)
+            shortcuts = [
+                ('Ctrl+Z', '悔棋'),
+                ('F11', '切换全屏'),
+                ('Esc', '返回主菜单'),
+                ('?', '隐藏提示'),
+            ]
+            for key, desc in shortcuts:
+                row = tk.Frame(self._hotkey_frame, bg=self.card_bg)
+                row.pack(fill='x', padx=16, pady=2)
+                tk.Label(row, text=key, font=self.small_font, bg=self.card_bg, fg=self.accent, width=10, anchor='w').pack(side='left')
+                tk.Label(row, text=desc, font=self.small_font, bg=self.card_bg, fg=self.text_secondary, anchor='w').pack(side='left', padx=8)
+            tk.Button(self._hotkey_frame, text='关闭', command=self._hide_hotkeys, font=self.button_font, bg=self.accent, fg='white', relief='flat', padx=16, pady=6, bd=0).pack(pady=(8, 10))
+
+        def _hide_hotkeys(self):
+            if hasattr(self, '_hotkey_frame') and self._hotkey_frame:
+                self._hotkey_frame.destroy()
+                self._hotkey_frame = None
+            self._hotkeys_shown = False
 
         def build_start_screen(self):
             for widget in self.root.winfo_children():
@@ -108,6 +168,14 @@ if tk is not None:
 
             section = tk.Frame(card, bg=self.card_bg)
             section.pack(fill='x', pady=(0, 12))
+            tk.Label(section, text='主题', font=self.label_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
+            theme_frame = tk.Frame(section, bg=self.card_bg)
+            theme_frame.pack(anchor='w', pady=(8, 8))
+            for name in list(THEMES.keys()):
+                tk.Radiobutton(theme_frame, text=name, variable=self.theme_var, value=name, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=16, pady=12, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=8)
+
+            section = tk.Frame(card, bg=self.card_bg)
+            section.pack(fill='x', pady=(0, 12))
             tk.Label(section, text='初始设置', font=self.label_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
             fields = tk.Frame(section, bg=self.card_bg)
             fields.pack(anchor='w', pady=(8, 0))
@@ -141,11 +209,16 @@ if tk is not None:
             self.game_over = False
             self.last_move = None
             self._paused = False
+            new_theme = self.theme_var.get()
+            if new_theme != self._theme_name:
+                self._apply_theme(new_theme)
+                self.root.configure(bg=self.bg_color)
             save_config(
                 ai_level=self.level_var.get(),
                 board_size=size,
                 starting_stones=starting,
                 ai_delay_ms=self.ai_delay_var.get(),
+                theme=self._theme_name,
             )
             self.build_game_ui()
             self.update_ui()
@@ -380,18 +453,16 @@ if tk is not None:
                 self.root.after(300, self.ai_take_turn)
 
         def perform_placement(self, x, y):
-            self.game.save_snapshot()
             self.game.start_turn_timer()
-            if not self.game.place_stone(x, y):
+            result = self.game.do_placement(x, y)
+            if result is None:
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 没有棋子可下！')
                 return
             self.last_move = (x, y)
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 放置 {chr(ord("A") + x)}{y + 1}。')
-            result, recovered, can_replace = self.game.process_stone_placement(x, y)
-            self.game.log_move('place', x, y, recovered or 0)
             self._refresh_log()
-            if result == 'recovered':
-                if can_replace:
+            if result.result == 'recovered':
+                if result.can_replace:
                     self.waiting_replacement = True
                     self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 连成五子，请选择替换对方棋子。')
                     self.update_ui()
@@ -400,17 +471,15 @@ if tk is not None:
             self.conclude_turn()
 
         def perform_replacement(self, x, y):
-            self.game.save_snapshot()
-            if not self.game.apply_replacement(x, y):
+            result = self.game.do_replacement(x, y)
+            if result is None:
                 return
             self.last_move = (x, y)
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 替换了 {chr(ord("A") + x)}{y + 1}。')
             self.waiting_replacement = False
-            result, recovered, can_replace = self.game.process_stone_placement(x, y)
-            self.game.log_move('replace', x, y, recovered or 0)
             self._refresh_log()
-            if result == 'recovered':
-                if can_replace:
+            if result.result == 'recovered':
+                if result.can_replace:
                     self.waiting_replacement = True
                     self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 再次连成五子，请继续替换。')
                     self.update_ui()
@@ -439,6 +508,7 @@ if tk is not None:
         def ai_take_turn(self):
             if self._paused or self.game_over:
                 return
+            self.status_var.set(f'{PLAYER_NAMES[self.game.current]} AI思考中…')
             if self.waiting_replacement:
                 replacement = select_ai_replacement(self.game.board, self.game.current, self.game.ai_levels[self.game.current])
                 if replacement:

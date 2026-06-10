@@ -153,6 +153,24 @@ class Game:
         self.board.set(x, y, self.current)
         return True
 
+    def do_placement(self, x, y):
+        if self.supply[self.current] <= 0:
+            return None
+        if not self.place_stone(x, y):
+            return None
+        result, recovered, can_replace = self.process_stone_placement(x, y)
+        self.log_move('place', x, y, recovered or 0)
+        return PlacementResult(result, recovered, can_replace)
+
+    def do_replacement(self, x, y):
+        if self.board.get(x, y) != self.opponent():
+            return None
+        if not self.apply_replacement(x, y):
+            return None
+        result, recovered, can_replace = self.process_stone_placement(x, y)
+        self.log_move('replace', x, y, recovered or 0)
+        return PlacementResult(result, recovered, can_replace)
+
     def process_stone_placement(self, x, y):
         line = self.board.find_connected_line(x, y, self.current)
         if not line:

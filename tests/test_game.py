@@ -201,6 +201,50 @@ class TestGame(unittest.TestCase):
         self.assertEqual(g.board.get(7, 8), 2)
         self.assertEqual(g.supply[1], 29)
 
+    def test_do_placement_normal(self):
+        g = Game()
+        result = g.do_placement(7, 7)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.result, 'no_line')
+        self.assertIsNone(result.recovered)
+        self.assertFalse(result.can_replace)
+        self.assertEqual(g.supply[1], STARTING_STONES - 1)
+        self.assertEqual(len(g.move_log), 1)
+        self.assertEqual(g.move_log[0]['action'], 'place')
+
+    def test_do_placement_no_supply(self):
+        g = Game(starting_stones=0)
+        result = g.do_placement(7, 7)
+        self.assertIsNone(result)
+        self.assertTrue(g.board.is_empty(7, 7))
+
+    def test_do_placement_with_recovery(self):
+        g = Game()
+        for x in range(4):
+            g.place_stone(x, 7)
+        g.supply[1] = 30
+        result = g.do_placement(4, 7)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.result, 'recovered')
+        self.assertEqual(result.recovered, 5)
+
+    def test_do_replacement_normal(self):
+        g = Game()
+        g.place_stone(7, 7)
+        g.current = 2
+        g.place_stone(7, 8)
+        g.current = 1
+        result = g.do_replacement(7, 8)
+        self.assertIsNotNone(result)
+        self.assertEqual(g.board.get(7, 8), 1)
+        self.assertEqual(g.supply[1], STARTING_STONES - 2)
+        self.assertEqual(len(g.move_log), 1)
+
+    def test_do_replacement_wrong_target(self):
+        g = Game()
+        result = g.do_replacement(7, 7)
+        self.assertIsNone(result)
+
 
 if __name__ == '__main__':
     unittest.main()

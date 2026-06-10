@@ -179,23 +179,26 @@ def _handle_line_loop(game: Game, x: int, y: int) -> bool:
         return False
     game.board.render()
     print(f'{PLAYER_NAMES[game.current]} 放置棋子: {chr(ord("A") + x)}{y + 1}')
+    result = game.process_stone_placement(x, y)
+    game.log_move('place', x, y, result.recovered or 0)
     while True:
-        result, recovered, can_replace = game.process_stone_placement(x, y)
-        if result == 'no_line':
+        if result.result == 'no_line':
             break
-        print(f'{PLAYER_NAMES[game.current]} 连成五子，回收 {recovered} 颗棋子！')
+        print(f'{PLAYER_NAMES[game.current]} 连成五子，回收 {result.recovered} 颗棋子！')
         game.board.render()
-        if not can_replace:
+        if not result.can_replace:
             print(f'{PLAYER_NAMES[game.current]} 没有可替换的对方棋子，回合结束。')
             break
         if game.player_types[game.current] == 'human':
             rep = input_replacement(game)
         else:
+            print(f'AI({game.ai_levels[game.current]}) 思考中…')
             rep = select_ai_replacement(game.board, game.current, game.ai_levels[game.current])
         if rep is None:
             break
         rx, ry = rep
-        if not game.apply_replacement(rx, ry):
+        result = game.do_replacement(rx, ry)
+        if result is None:
             break
         print(f'{PLAYER_NAMES[game.current]} 替换了 {chr(ord("A") + rx)}{ry + 1}')
         game.board.render()
@@ -236,6 +239,7 @@ def play(game: Game):
         else:
             if game.player_types[1] == 'ai' and game.player_types[2] == 'ai':
                 time.sleep(0.3)
+            print(f'AI({game.ai_levels[game.current]}) 思考中…')
             x, y = select_ai_move(game.board, game.current, game.ai_levels[game.current])
             print(f'AI({game.ai_levels[game.current]}) 选择 {chr(ord("A") + x)}{y + 1}')
 

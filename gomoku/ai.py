@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple
 
 from .board import (
     Board, DIRECTIONS,
-    _evaluate_potential, _would_form_five, _has_immediate_five,
+    _evaluate_potential, _would_form_five,
 )
 
 AI_LEVELS = ['simple', 'medium', 'hard']
@@ -14,7 +14,7 @@ def select_ai_move(board: Board, player: int, level: str) -> Tuple[int, int]:
         return _simple_move(board, player)
     if level == 'medium':
         return _medium_move(board, player)
-    return _hard_move(board, player)
+    return _hard_move(board, player, level)
 
 
 def _simple_move(board: Board, player: int) -> Tuple[int, int]:
@@ -45,7 +45,7 @@ def _light_score(board: Board, player: int, x: int, y: int) -> int:
 
 def _score_all_moves(board: Board, player: int) -> List[Tuple[float, int, int]]:
     opponent = 3 - player
-    opp_has_five_now = _has_immediate_five(board, opponent)
+    opp_has_five_now = board.has_immediate_five(opponent)
     scored = []
     for x, y in board.legal_moves():
         score = _light_score(board, player, x, y)
@@ -65,7 +65,7 @@ def _medium_move(board: Board, player: int) -> Tuple[int, int]:
     return random.choice(best)
 
 
-def _hard_move(board: Board, player: int) -> Tuple[int, int]:
+def _hard_move(board: Board, player: int, level: str = 'hard') -> Tuple[int, int]:
     scored = _score_all_moves(board, player)
     if not scored:
         return None
@@ -75,14 +75,14 @@ def _hard_move(board: Board, player: int) -> Tuple[int, int]:
     best_value = -10**9
 
     for _, x, y in candidates:
-        sim = _simulate_placement(board, player, x, y)
+        sim = _simulate_placement(board, player, x, y, level)
         atk = sim._board_potential[player]
         dfs = sim._board_potential[opponent]
 
         value = atk * 1.1 - dfs * 1.2
-        if _has_immediate_five(sim, opponent):
+        if sim.has_immediate_five(opponent):
             value -= 50000
-        if _has_immediate_five(sim, player):
+        if sim.has_immediate_five(player):
             value += 100000
 
         if value > best_value:
@@ -92,7 +92,7 @@ def _hard_move(board: Board, player: int) -> Tuple[int, int]:
     return best_move
 
 
-def _simulate_placement(board: Board, player: int, x: int, y: int) -> Board:
+def _simulate_placement(board: Board, player: int, x: int, y: int, level: str) -> Board:
     clone = board.clone()
     clone.set(x, y, player)
     opponent = 3 - player
@@ -103,7 +103,7 @@ def _simulate_placement(board: Board, player: int, x: int, y: int) -> Board:
         if not line:
             break
         clone.remove_line(line)
-        rep = _quick_pick_replacement(clone, player, opponent)
+        rep = select_ai_replacement(clone, player, level, quick=True)
         if rep is None:
             break
         rx, ry = rep
@@ -112,22 +112,7 @@ def _simulate_placement(board: Board, player: int, x: int, y: int) -> Board:
     return clone
 
 
-def _quick_pick_replacement(board: Board, player: int, opponent: int) -> Optional[Tuple[int, int]]:
-    best_score = -10**9
-    best = None
-    for x, y in board._player_cells[opponent]:
-        our_val = _evaluate_potential(player, x, y, board)
-        opp_val = _evaluate_potential(opponent, x, y, board)
-        plus = 100000 if _would_form_five(board, player, x, y) else 0
-        minus = 100000 if _would_form_five(board, opponent, x, y) else 0
-        score = our_val * 1.5 + opp_val + plus - minus
-        if score > best_score:
-            best_score = score
-            best = (x, y)
-    return best
-
-
-def select_ai_replacement(board: Board, player: int, level: str):
+def select_ai_replacement(board: Board, player: int, level: str, quick: bool = False):
     opponent = 3 - player
     candidates = list(board._player_cells[opponent])
     if not candidates:
@@ -135,10 +120,24 @@ def select_ai_replacement(board: Board, player: int, level: str):
     if level == 'simple':
         return random.choice(candidates)
 
+    if quick:
+        best_score = -10**9
+        best = None
+        for x, y in candidates:
+            our_val = _evaluate_potential(player, x, y, board)
+            opp_val = _evaluate_potential(opponent, x, y, board)
+            plus = 100000 if _would_form_five(board, player, x, y) else 0
+            minus = 100000 if _would_form_five(board, opponent, x, y) else 0
+            score = our_val * 1.5 + opp_val + plus - minus
+            if score > best_score:
+                best_score = score
+                best = (x, y)
+        return best
+
     best_score = -10**9
     best_moves = []
 
-    opp_has_five = _has_immediate_five(board, opponent)
+    opp_has_five = board.has_immediate_five(opponent)
 
     for x, y in candidates:
         our_gain = _evaluate_potential(player, x, y, board)
@@ -152,7 +151,7 @@ def select_ai_replacement(board: Board, player: int, level: str):
         if opp_has_five:
             clone = board.clone()
             clone.set(x, y, player)
-            if not _has_immediate_five(clone, opponent):
+            if not clone.has_immediate_five(opponent):
                 opp_loss += 50000
 
         if clone is None:

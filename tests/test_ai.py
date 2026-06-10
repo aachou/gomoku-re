@@ -61,6 +61,25 @@ class TestAI(unittest.TestCase):
         rx, ry = rep
         self.assertEqual(b.get(rx, ry), 2)
 
+    def test_ai_replacement_quick_medium(self):
+        b = Board()
+        b.set(7, 7, 1)
+        b.set(7, 8, 2)
+        rep = select_ai_replacement(b, 1, 'medium', quick=True)
+        self.assertIsNotNone(rep)
+        rx, ry = rep
+        self.assertEqual(b.get(rx, ry), 2)
+
+    def test_ai_replacement_quick_hard(self):
+        b = Board()
+        b.set(7, 7, 1)
+        b.set(7, 8, 2)
+        b.set(8, 7, 1)
+        rep = select_ai_replacement(b, 1, 'hard', quick=True)
+        self.assertIsNotNone(rep)
+        rx, ry = rep
+        self.assertEqual(b.get(rx, ry), 2)
+
     def test_ai_replacement_no_candidates(self):
         b = Board()
         rep = select_ai_replacement(b, 1, 'hard')

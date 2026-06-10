@@ -27,14 +27,19 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
 - Coordinates: 0-indexed internally, `A1` or `1 1` (1-indexed) in user I/O
 - `find_connected_line()` returns exactly 5 coords or None
 - `_handle_line_loop` (cli.py) and `perform_placement`/`conclude_turn` (ui.py) are **separate implementations** of the same turn logic
-- Undo calls `_rebuild_cache()` to reconstruct Board's incremental cache
+- `Game.do_placement(x, y)` and `Game.do_replacement(x, y)` encapsulate action+log+process; used by GUI but CLI separates render between steps
+- Board has `has_immediate_five(player)` lazy cache (`_five_threat_cache`), invalidated on every `set()`; used by AI
+- Undo calls `_rebuild_cache()` to reconstruct Board's incremental cache and threat cache
 - Supply starts at 30 per player; AI delay defaults to 300ms
 - No external dependencies (pure stdlib)
+- Config (`gomoku_config.json`) persists: `ai_level`, `board_size`, `starting_stones`, `ai_delay_ms`, `theme`
+- UI themes: 3 presets (`默认`/`森林`/`暖阳`) in `THEMES` dict (`ui.py:16`); hotkey hints toggle with `?`
 
 ## Notable pitfalls
 
 - `GameUI` is conditionally defined (only when tkinter is importable); `from .ui import GameUI` in `__init__.py` will fail at module level if tkinter absent — handled via `GameUI = None`
 - `_rebuild_cache()` must be called after manually mutating `grid` or after undo
 - `Board.clone()` is used in AI hard mode simulation; does a shallow copy of `_cell_potential` values (list copies are sufficient since they contain ints)
-- `_quick_pick_replacement` in ai.py is used inside simulation only; the public replacement function is `select_ai_replacement`
+- `select_ai_replacement(..., quick=True)` is the lightweight version used inside simulation (no cloning); `quick=False` (default) is the full version used in actual play
+- `_simulate_placement` now passes `level` to `select_ai_replacement` for consistent replacement logic in simulation
 - CI: no CI workflow present currently

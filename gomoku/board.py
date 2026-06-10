@@ -95,6 +95,7 @@ class Board:
         self._player_cells: Dict[int, Set[Tuple[int, int]]] = {1: set(), 2: set()}
         self._cell_potential: Dict[Tuple[int, int], List[int]] = {}
         self._board_potential: List[int] = [0, 0, 0]
+        self._five_threat_cache: Dict[int, Optional[bool]] = {1: None, 2: None}
         self._init_potential_cache()
 
     def _rebuild_cache(self):
@@ -110,6 +111,12 @@ class Board:
                     self._stone_count[v] += 1
                     self._player_cells[v].add((x, y))
         self._init_potential_cache()
+        self._five_threat_cache = {1: None, 2: None}
+
+    def has_immediate_five(self, player: int) -> bool:
+        if self._five_threat_cache[player] is None:
+            self._five_threat_cache[player] = _has_immediate_five(self, player)
+        return self._five_threat_cache[player]
 
     def _init_potential_cache(self):
         self._cell_potential.clear()
@@ -176,6 +183,7 @@ class Board:
             self._player_cells[value].add((x, y))
 
         self._update_potential_around(x, y)
+        self._five_threat_cache = {1: None, 2: None}
         return old
 
     def is_empty(self, x, y):
@@ -207,7 +215,7 @@ class Board:
                 coords.append((cx, cy))
                 step += 1
                 cx, cy = x + dx * step * sign, y + dy * step * sign
-        coords.sort(key=lambda p: p[0] * dx + p[1] * dy)
+        coords.sort(key=lambda p: (p[0] - x) * dx + (p[1] - y) * dy)
         return coords
 
     def find_connected_line(self, x, y, player) -> Optional[List[Tuple[int, int]]]:
@@ -235,4 +243,5 @@ class Board:
         clone._player_cells = {1: self._player_cells[1].copy(), 2: self._player_cells[2].copy()}
         clone._cell_potential = {k: v.copy() for k, v in self._cell_potential.items()}
         clone._board_potential = self._board_potential.copy()
+        clone._five_threat_cache = {1: self._five_threat_cache[1], 2: self._five_threat_cache[2]}
         return clone

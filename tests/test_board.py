@@ -140,6 +140,45 @@ class TestBoard(unittest.TestCase):
         self.assertIn((1, 1), clone._player_cells[2])
         self.assertNotIn((0, 0), clone._player_cells[2])
 
+    def test_scan_line_anti_diagonal(self):
+        b = Board()
+        for i in range(5):
+            b.set(4 - i, i, 1)
+        coords = b.scan_line(2, 2, 1, -1, 1)
+        self.assertEqual(len(coords), 5)
+        self.assertEqual(coords, [(0, 4), (1, 3), (2, 2), (3, 1), (4, 0)])
+
+    def test_has_immediate_five_false_when_empty(self):
+        b = Board()
+        self.assertFalse(b.has_immediate_five(1))
+        self.assertFalse(b.has_immediate_five(2))
+
+    def test_has_immediate_five_true(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        self.assertTrue(b.has_immediate_five(1))
+
+    def test_has_immediate_five_cache_invalidated_on_set(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        b.set(0, 0, 2)
+        self.assertTrue(b.has_immediate_five(1))
+        b.set(4, 7, 2)
+        self.assertFalse(b.has_immediate_five(1))
+
+    def test_clone_preserves_five_threat(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        self.assertTrue(b.has_immediate_five(1))
+        c = b.clone()
+        self.assertTrue(c.has_immediate_five(1))
+        c.set(4, 7, 2)
+        self.assertFalse(c.has_immediate_five(1))
+        self.assertTrue(b.has_immediate_five(1))
+
 
 if __name__ == '__main__':
     unittest.main()
