@@ -8,7 +8,7 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
 
 - `uv run python main.py` — launch GUI (tkinter required; auto-fallback to CLI if unavailable)
 - `uv run python main.py cli` — force CLI mode
-- `uv run pytest` — run all tests (unittest-based, 58 tests)
+- `uv run pytest` — run all tests (unittest-based, 65 tests)
 - `python -m pytest tests/test_file.py::TestClass::test_method` — run a single test
 - `uv lock` — sync lockfile after dependency changes
 
@@ -18,9 +18,9 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
 - `gomoku/` — internal package
   - `board.py` — Board (15×15 grid: 0=empty, 1=black, 2=white), incremental evaluation cache, line scanning
   - `game.py` — Game, PlacementResult, config persistence (`gomoku_config.json`), undo history, JSON serialization
-  - `ai.py` — 3 difficulty levels (`simple`/`medium`/`hard`), separate `select_ai_move` and `select_ai_replacement`
+  - `ai.py` — 3 difficulty levels (`simple`/`medium`/`hard`); `_score_all_moves` early-returns on winning move; `select_ai_replacement(quick=True)` for simulation
   - `cli.py` — interactive CLI, save/load (`gomoku_save.json`), coordinate parse (A1 or `1 1`)
-  - `ui.py` — tkinter GUI; `GameUI = None` if tkinter missing
+  - `ui.py` — tkinter GUI; Ctrl+S/L save/load, Esc/菜单确认弹窗, 对局统计, AI等级提示, 高亮缓存; `GameUI = None` if tkinter missing
 - `tests/` — unittest, no pytest plugins needed
 
 ## Game quirks

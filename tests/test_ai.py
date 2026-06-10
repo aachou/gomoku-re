@@ -144,6 +144,13 @@ class TestAI(unittest.TestCase):
         x, y = select_ai_move(b, 1, 'simple')
         self.assertTrue(b.in_bounds(x, y))
 
+    def test_ai_medium_picks_winning_move_early(self):
+        b = Board(15)
+        for x in range(4):
+            b.set(x, 0, 1)
+        x, y = select_ai_move(b, 1, 'medium')
+        self.assertEqual((x, y), (4, 0))
+
 
 if __name__ == '__main__':
     unittest.main()

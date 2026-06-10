@@ -108,6 +108,8 @@ class Game:
             'player_types': [self.player_types[1], self.player_types[2]],
             'ai_levels': [self.ai_levels[1], self.ai_levels[2]],
             'move_log': self.move_log,
+            'timers': [self.timers[1], self.timers[2]],
+            'history': self._history,
         }
 
     @classmethod
@@ -122,6 +124,10 @@ class Game:
         game.player_types = {1: data['player_types'][0], 2: data['player_types'][1]}
         game.ai_levels = {1: data['ai_levels'][0], 2: data['ai_levels'][1]}
         game.move_log = data.get('move_log', [])
+        if 'timers' in data:
+            game.timers = {1: data['timers'][0], 2: data['timers'][1]}
+        if 'history' in data:
+            game._history = data['history']
         return game
 
     def has_lost(self, player):

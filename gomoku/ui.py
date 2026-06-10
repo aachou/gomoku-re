@@ -7,6 +7,8 @@ except ImportError:
     tkfont = None
     messagebox = None
 
+import json
+import os
 import time
 
 from .game import Game, PLAYER_NAMES, STARTING_STONES, save_config, load_config
@@ -60,6 +62,8 @@ if tk is not None:
             self._hotkeys_shown = False
             self._stones_dirty = False
             self._highlight_color = '#ef4444'
+            self._in_game = False
+            self._highlight_cells = []
             self.buttons = []
             self.level_var.set(config.get('ai_level', 'medium'))
             self.board_size_var.set(config.get('board_size', 15))
@@ -79,7 +83,11 @@ if tk is not None:
             self.root.option_add('*Font', self.label_font)
             self.root.bind('<Control-z>', lambda e: self.perform_undo())
             self.root.bind('<F11>', lambda e: self.toggle_fullscreen())
-            self.root.bind('<Escape>', lambda e: self.build_start_screen())
+            self.root.bind('<Escape>', self._on_escape)
+            self.root.bind('<Control-s>', self._save_game)
+            self.root.bind('<Control-S>', self._save_game)
+            self.root.bind('<Control-l>', self._load_game)
+            self.root.bind('<Control-L>', self._load_game)
             self.root.bind('<Key-slash>', lambda e: self._toggle_hotkeys())
             self.root.bind('<Key-question>', lambda e: self._toggle_hotkeys())
             self.build_start_screen()
@@ -117,6 +125,8 @@ if tk is not None:
             tk.Label(self._hotkey_frame, text='快捷键', font=self.header_font, bg=self.card_bg, fg=self.text_main).pack(pady=(10, 4), padx=20)
             shortcuts = [
                 ('Ctrl+Z', '悔棋'),
+                ('Ctrl+S', '保存'),
+                ('Ctrl+L', '载入'),
                 ('F11', '切换全屏'),
                 ('Esc', '返回主菜单'),
                 ('?', '隐藏提示'),
@@ -134,9 +144,75 @@ if tk is not None:
                 self._hotkey_frame = None
             self._hotkeys_shown = False
 
+        def _on_escape(self, event=None):
+            if not self._in_game:
+                return
+            if messagebox.askyesno('确认', '返回主菜单？当前对局将丢失。'):
+                self.build_start_screen()
+
+        def _confirm_back_to_menu(self):
+            if messagebox.askyesno('确认', '返回主菜单？当前对局将丢失。'):
+                self.build_start_screen()
+
+        def _save_game(self, event=None):
+            if not self._in_game:
+                return
+            save_path = 'gomoku_save.json'
+            try:
+                with open(save_path, 'w') as f:
+                    json.dump(self.game.serialize(), f)
+                self.status_var.set('游戏已保存。')
+            except Exception:
+                self.status_var.set('保存失败！')
+
+        def _load_game(self, event=None):
+            save_path = 'gomoku_save.json'
+            if not os.path.exists(save_path):
+                self.status_var.set('未找到存档。')
+                return
+            try:
+                with open(save_path) as f:
+                    data = json.load(f)
+                self.game = Game.deserialize(data)
+                self.waiting_replacement = False
+                self.game_over = False
+                self.last_move = None
+                self._highlight_color = '#ef4444'
+                self._stones_dirty = True
+                self._highlight_cells = []
+                self._in_game = True
+                self.build_game_ui()
+                self.update_ui()
+                self._refresh_log(full=True)
+                self.status_var.set('游戏已载入。')
+                if self.game.player_types[self.game.current] == 'ai':
+                    self.root.after(300, self.ai_take_turn)
+            except Exception:
+                self.status_var.set('载入失败！')
+
+        def _show_game_stats(self, winner):
+            moves = len(self.game.move_log)
+            b_moves = sum(1 for m in self.game.move_log if m['player'] == 1)
+            w_moves = sum(1 for m in self.game.move_log if m['player'] == 2)
+            b_rec = sum(m.get('recovered', 0) for m in self.game.move_log if m['player'] == 1)
+            w_rec = sum(m.get('recovered', 0) for m in self.game.move_log if m['player'] == 2)
+            b_time = self._format_time(self.game.timers[1])
+            w_time = self._format_time(self.game.timers[2])
+            stats = (
+                f'总步数：{moves}\n'
+                f'黑棋落子：{b_moves}，回收：{b_rec}，用时：{b_time}\n'
+                f'白棋落子：{w_moves}，回收：{w_rec}，用时：{w_time}'
+            )
+            if winner:
+                messagebox.showinfo('对局统计', f'{PLAYER_NAMES[winner]} 胜利！\n\n{stats}')
+            else:
+                messagebox.showinfo('对局统计', f'平局！\n\n{stats}')
+
         def build_start_screen(self):
             for widget in self.root.winfo_children():
                 widget.destroy()
+            self._in_game = False
+            self._highlight_cells = []
 
             container = tk.Frame(self.root, bg=self.bg_color)
             container.pack(fill='both', expand=True)
@@ -224,7 +300,9 @@ if tk is not None:
             self.waiting_replacement = False
             self.game_over = False
             self.last_move = None
+            self._highlight_cells = []
             self._paused = False
+            self._in_game = True
             new_theme = self.theme_var.get()
             if new_theme != self._theme_name:
                 self._apply_theme(new_theme)
@@ -301,8 +379,8 @@ if tk is not None:
             footer.pack(fill='x')
             tk.Button(footer, text='↶ 悔棋', command=self.perform_undo, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
-            tk.Button(footer, text='↻ 重新开始', command=self.build_start_screen, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
-            tk.Button(footer, text='← 主菜单', command=self.build_start_screen, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+            tk.Button(footer, text='↻ 重新开始', command=self._confirm_back_to_menu, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+            tk.Button(footer, text='← 主菜单', command=self._confirm_back_to_menu, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
 
         def _update_speed_label(self):
             val = self.ai_delay_var.get()
@@ -378,8 +456,7 @@ if tk is not None:
 
         def _draw_highlights(self):
             if self.waiting_replacement and self.game.player_types[self.game.current] == 'human':
-                opponent = 3 - self.game.current
-                for x, y in self.game.board._player_cells[opponent]:
+                for x, y in self._highlight_cells:
                     x1 = self.board_offset_x + x * self.cell_size
                     y1 = self.board_offset_y + y * self.cell_size
                     self.canvas.create_rectangle(x1 + 2, y1 + 2, x1 + self.cell_size - 2, y1 + self.cell_size - 2, outline='#22c55e', width=3, tags='highlight')
@@ -487,6 +564,7 @@ if tk is not None:
             self.last_move = None
             self._highlight_color = '#ef4444'
             self._stones_dirty = True
+            self._highlight_cells = []
             self.update_ui()
             self._refresh_log(full=True)
             self.status_var.set('已悔棋。')
@@ -508,6 +586,7 @@ if tk is not None:
             if result.result == 'recovered':
                 if result.can_replace:
                     self.waiting_replacement = True
+                    self._highlight_cells = list(self.game.board._player_cells[3 - self.game.current])
                     self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 连成五子，请选择替换对方棋子。')
                     self.update_ui()
                     return
@@ -528,6 +607,7 @@ if tk is not None:
             if result.result == 'recovered':
                 if result.can_replace:
                     self.waiting_replacement = True
+                    self._highlight_cells = list(self.game.board._player_cells[3 - self.game.current])
                     self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 再次连成五子，请继续替换。')
                     self.update_ui()
                     return
@@ -539,11 +619,14 @@ if tk is not None:
             self.update_ui()
             if self.game.has_lost(self.game.current):
                 self.game_over = True
-                messagebox.showinfo('游戏结束', f'{PLAYER_NAMES[self.game.current]} 棋子用完，{PLAYER_NAMES[self.game.opponent()]} 胜利！')
+                winner = self.game.opponent()
+                messagebox.showinfo('游戏结束', f'{PLAYER_NAMES[self.game.current]} 棋子用完，{PLAYER_NAMES[winner]} 胜利！')
+                self._show_game_stats(winner)
                 return
             if self.game.is_draw():
                 self.game_over = True
                 messagebox.showinfo('游戏结束', '棋盘已满，平局！')
+                self._show_game_stats(None)
                 return
             self.game.current = self.game.opponent()
             self.waiting_replacement = False
@@ -555,7 +638,8 @@ if tk is not None:
         def ai_take_turn(self):
             if self._paused or self.game_over:
                 return
-            self.status_var.set(f'{PLAYER_NAMES[self.game.current]} AI思考中…')
+            level = self.game.ai_levels.get(self.game.current, 'medium')
+            self.status_var.set(f'{PLAYER_NAMES[self.game.current]} AI({level}) 思考中…')
             if self.waiting_replacement:
                 replacement = select_ai_replacement(self.game.board, self.game.current, self.game.ai_levels[self.game.current])
                 if replacement:

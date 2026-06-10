@@ -245,6 +245,49 @@ class TestGame(unittest.TestCase):
         result = g.do_replacement(7, 7)
         self.assertIsNone(result)
 
+    def test_timers_in_serialize(self):
+        g = Game()
+        g.timers = {1: 12.5, 2: 8.3}
+        data = g.serialize()
+        self.assertEqual(data['timers'], [12.5, 8.3])
+
+    def test_timers_restored_on_deserialize(self):
+        g = Game()
+        g.timers = {1: 30.0, 2: 15.5}
+        data = g.serialize()
+        g2 = Game.deserialize(data)
+        self.assertEqual(g2.timers[1], 30.0)
+        self.assertEqual(g2.timers[2], 15.5)
+
+    def test_history_in_serialize(self):
+        g = Game()
+        g.save_snapshot()
+        g.place_stone(7, 7)
+        data = g.serialize()
+        self.assertEqual(len(data['history']), 1)
+
+    def test_history_restored_on_deserialize(self):
+        g = Game()
+        g.save_snapshot()
+        g.place_stone(7, 7)
+        data = g.serialize()
+        g2 = Game.deserialize(data)
+        self.assertTrue(g2.undo())
+        self.assertTrue(g2.board.is_empty(7, 7))
+
+    def test_move_log_stats(self):
+        g = Game()
+        g.do_placement(0, 0)
+        g.current = 2
+        g.do_placement(0, 1)
+        g.current = 1
+        b_moves = sum(1 for m in g.move_log if m['player'] == 1)
+        w_moves = sum(1 for m in g.move_log if m['player'] == 2)
+        total = len(g.move_log)
+        self.assertEqual(total, 2)
+        self.assertEqual(b_moves, 1)
+        self.assertEqual(w_moves, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

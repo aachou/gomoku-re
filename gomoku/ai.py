@@ -51,6 +51,8 @@ def _score_all_moves(board: Board, player: int) -> List[Tuple[float, int, int]]:
         score = _light_score(board, player, x, y)
         if opp_has_five_now and _would_form_five(board, opponent, x, y):
             score += 50000
+        elif not opp_has_five_now and _would_form_five(board, player, x, y):
+            return [(100000, x, y)]
         scored.append((score, x, y))
     scored.sort(reverse=True, key=lambda p: p[0])
     return scored
