@@ -69,7 +69,7 @@ def _hard_move(board: Board, player: int, level: str = 'hard') -> Tuple[int, int
     scored = _score_all_moves(board, player)
     if not scored:
         return None
-    candidates = scored[:min(30, len(scored))]
+    candidates = scored[:min(20, len(scored))]
     opponent = 3 - player
     best_move = (candidates[0][1], candidates[0][2])
     best_value = -10**9

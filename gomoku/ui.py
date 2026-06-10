@@ -58,6 +58,8 @@ if tk is not None:
             self._paused = False
             self._timer_job = None
             self._hotkeys_shown = False
+            self._stones_dirty = False
+            self._highlight_color = '#ef4444'
             self.buttons = []
             self.level_var.set(config.get('ai_level', 'medium'))
             self.board_size_var.set(config.get('board_size', 15))
@@ -96,6 +98,11 @@ if tk is not None:
             self.text_main = colors['text_main']
             self.text_secondary = colors['text_secondary']
 
+        def _preview_theme(self):
+            self._apply_theme(self.theme_var.get())
+            self.root.configure(bg=self.bg_color)
+            self.build_start_screen()
+
         def _toggle_hotkeys(self):
             self._hotkeys_shown = not self._hotkeys_shown
             if self._hotkeys_shown:
@@ -131,11 +138,20 @@ if tk is not None:
             for widget in self.root.winfo_children():
                 widget.destroy()
 
-            container = tk.Frame(self.root, bg=self.bg_color, padx=20, pady=20)
+            container = tk.Frame(self.root, bg=self.bg_color)
             container.pack(fill='both', expand=True)
 
-            card = tk.Frame(container, bg=self.card_bg, bd=0, highlightbackground='#1e293b', highlightthickness=1, padx=26, pady=26)
-            card.pack(padx=20, pady=24, fill='x', expand=True)
+            canvas = tk.Canvas(container, bg=self.bg_color, highlightthickness=0)
+            scrollbar = tk.Scrollbar(container, orient='vertical', command=canvas.yview)
+            canvas.configure(yscrollcommand=scrollbar.set)
+            canvas.pack(side='left', fill='both', expand=True)
+            scrollbar.pack(side='right', fill='y')
+
+            card = tk.Frame(canvas, bg=self.card_bg, bd=0, highlightbackground='#1e293b', highlightthickness=1, padx=26, pady=26)
+            card.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+            card_win = canvas.create_window((10, 10), window=card, anchor='nw')
+            canvas.bind('<Configure>', lambda e: canvas.itemconfig(card_win, width=e.width - 20))
+            canvas.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
 
             accent_bar = tk.Frame(card, bg=self.accent, height=4)
             accent_bar.pack(fill='x', side='top', pady=(0, 16))
@@ -172,7 +188,7 @@ if tk is not None:
             theme_frame = tk.Frame(section, bg=self.card_bg)
             theme_frame.pack(anchor='w', pady=(8, 8))
             for name in list(THEMES.keys()):
-                tk.Radiobutton(theme_frame, text=name, variable=self.theme_var, value=name, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=16, pady=12, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=8)
+                tk.Radiobutton(theme_frame, text=name, variable=self.theme_var, value=name, command=self._preview_theme, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=16, pady=12, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=8)
 
             section = tk.Frame(card, bg=self.card_bg)
             section.pack(fill='x', pady=(0, 12))
@@ -307,9 +323,9 @@ if tk is not None:
             new_cell_size = min(cell_w, cell_h)
             board_w = new_cell_size * cols
             board_h = new_cell_size * rows
-            margin = self.cell_size
-            new_ox = max(margin, (w - board_w) // 2)
-            new_oy = max(margin, (h - board_h) // 2)
+            label_margin = new_cell_size // 2 + 8
+            new_ox = max(label_margin, (w - board_w) // 2)
+            new_oy = max(label_margin, (h - board_h) // 2)
             if (new_cell_size != self.cell_size or new_ox != self.board_offset_x or new_oy != self.board_offset_y):
                 self.cell_size = new_cell_size
                 self.board_offset_x = new_ox
@@ -358,7 +374,7 @@ if tk is not None:
                 lx, ly = self.last_move
                 cx = self.board_offset_x + lx * self.cell_size + self.cell_size // 2
                 cy = self.board_offset_y + ly * self.cell_size + self.cell_size // 2
-                self.canvas.create_oval(cx - radius - 2, cy - radius - 2, cx + radius + 2, cy + radius + 2, outline='#ef4444', width=2, tags='stone')
+                self.canvas.create_oval(cx - radius - 2, cy - radius - 2, cx + radius + 2, cy + radius + 2, outline=self._highlight_color, width=2, tags='stone')
 
         def _draw_highlights(self):
             if self.waiting_replacement and self.game.player_types[self.game.current] == 'human':
@@ -378,9 +394,19 @@ if tk is not None:
             if self._layout_changed(w, h):
                 self.canvas.delete('all')
                 self._draw_grid()
-            self.canvas.delete('stone', 'highlight')
-            self._draw_stones()
+                self._draw_stones()
+            elif self._stones_dirty:
+                self.canvas.delete('stone')
+                self._draw_stones()
+            self.canvas.delete('highlight')
             self._draw_highlights()
+            self._stones_dirty = False
+
+        def _reset_highlight(self):
+            self._highlight_color = '#ef4444'
+            if self.last_move is not None and hasattr(self, 'canvas'):
+                self.canvas.delete('stone')
+                self._draw_stones()
 
         def toggle_fullscreen(self):
             self.fullscreen = not self.fullscreen
@@ -410,18 +436,31 @@ if tk is not None:
             if not self.waiting_replacement:
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 请落子。')
 
-        def _refresh_log(self):
-            self.log_listbox.delete(0, 'end')
-            for entry in self.game.move_log:
-                p = PLAYER_NAMES[entry['player']]
-                pos = f'{chr(ord("A") + entry["x"])}{entry["y"] + 1}'
-                if entry['action'] == 'place':
-                    text = f'{p} 落子 {pos}'
-                    if entry['recovered']:
-                        text += f' 回收{entry["recovered"]}'
-                else:
-                    text = f'{p} 替换 {pos}'
-                self.log_listbox.insert('end', text)
+        def _refresh_log(self, full=False):
+            if full or not self.game.move_log:
+                self.log_listbox.delete(0, 'end')
+                for entry in self.game.move_log:
+                    p = PLAYER_NAMES[entry['player']]
+                    pos = f'{chr(ord("A") + entry["x"])}{entry["y"] + 1}'
+                    if entry['action'] == 'place':
+                        text = f'{p} 落子 {pos}'
+                        if entry['recovered']:
+                            text += f' 回收{entry["recovered"]}'
+                    else:
+                        text = f'{p} 替换 {pos}'
+                    self.log_listbox.insert('end', text)
+                self.log_listbox.see('end')
+                return
+            entry = self.game.move_log[-1]
+            p = PLAYER_NAMES[entry['player']]
+            pos = f'{chr(ord("A") + entry["x"])}{entry["y"] + 1}'
+            if entry['action'] == 'place':
+                text = f'{p} 落子 {pos}'
+                if entry['recovered']:
+                    text += f' 回收{entry["recovered"]}'
+            else:
+                text = f'{p} 替换 {pos}'
+            self.log_listbox.insert('end', text)
             self.log_listbox.see('end')
 
         def on_canvas_click(self, event):
@@ -446,8 +485,10 @@ if tk is not None:
             self.waiting_replacement = False
             self.game_over = False
             self.last_move = None
+            self._highlight_color = '#ef4444'
+            self._stones_dirty = True
             self.update_ui()
-            self._refresh_log()
+            self._refresh_log(full=True)
             self.status_var.set('已悔棋。')
             if self.game.player_types[self.game.current] == 'ai':
                 self.root.after(300, self.ai_take_turn)
@@ -459,8 +500,11 @@ if tk is not None:
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 没有棋子可下！')
                 return
             self.last_move = (x, y)
+            self._stones_dirty = True
+            self._highlight_color = '#ffdd00'
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 放置 {chr(ord("A") + x)}{y + 1}。')
             self._refresh_log()
+            self.root.after(200, self._reset_highlight)
             if result.result == 'recovered':
                 if result.can_replace:
                     self.waiting_replacement = True
@@ -475,9 +519,12 @@ if tk is not None:
             if result is None:
                 return
             self.last_move = (x, y)
+            self._stones_dirty = True
+            self._highlight_color = '#ffdd00'
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 替换了 {chr(ord("A") + x)}{y + 1}。')
             self.waiting_replacement = False
             self._refresh_log()
+            self.root.after(200, self._reset_highlight)
             if result.result == 'recovered':
                 if result.can_replace:
                     self.waiting_replacement = True

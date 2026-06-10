@@ -140,7 +140,7 @@ class Board:
         for dx, dy in DIRECTIONS:
             for sign in (1, -1):
                 step = 1
-                while True:
+                while step <= 5:
                     cx = x + dx * step * sign
                     cy = y + dy * step * sign
                     if not self.in_bounds(cx, cy):

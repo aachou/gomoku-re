@@ -179,6 +179,15 @@ class TestBoard(unittest.TestCase):
         self.assertFalse(c.has_immediate_five(1))
         self.assertTrue(b.has_immediate_five(1))
 
+    def test_potential_around_limited_to_5_steps(self):
+        b = Board(19)
+        b.set(9, 9, 1)
+        before = b._cell_potential.get((9, 8), [0, 0])[1]
+        b.set(0, 0, 2)
+        # cell (9, 8) is 10+ cells from (0, 0) — beyond 5-step limit, should be unchanged
+        after = b._cell_potential.get((9, 8), [0, 0])[1]
+        self.assertEqual(before, after)
+
 
 if __name__ == '__main__':
     unittest.main()
