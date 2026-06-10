@@ -7,7 +7,9 @@ except ImportError:
     tkfont = None
     messagebox = None
 
-from .game import Game, PLAYER_NAMES, STARTING_STONES, BOARD_SIZE
+from .game import Game, PLAYER_NAMES, STARTING_STONES
+from .board import BOARD_SIZE
+from .ai import select_ai_move, select_ai_replacement
 
 if tk is not None:
     class GameUI:
@@ -25,6 +27,7 @@ if tk is not None:
             self.text_secondary = '#475569'
             self.game = Game()
             self.waiting_replacement = False
+            self.game_over = False
             self.mode_var = tk.StringVar(value='pvp')
             self.side_var = tk.StringVar(value='1')
             self.level_var = tk.StringVar(value='medium')
@@ -32,6 +35,8 @@ if tk is not None:
             self.starting_stones_var = tk.IntVar(value=STARTING_STONES)
             self.board_size_var = tk.IntVar(value=BOARD_SIZE)
             self.cell_font_size = 12
+            self.board_offset_x = 0
+            self.board_offset_y = 0
             self.fullscreen = True
             self.buttons = []
             self.root.attributes('-fullscreen', True)
@@ -114,6 +119,7 @@ if tk is not None:
                 self.game.ai_levels = {1: None, 2: None}
 
             self.waiting_replacement = False
+            self.game_over = False
             self.build_game_ui()
             self.update_ui()
 
@@ -231,7 +237,7 @@ if tk is not None:
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 请落子。')
 
         def on_canvas_click(self, event):
-            if self.game.player_types[self.game.current] == 'ai':
+            if self.game_over or self.game.player_types[self.game.current] == 'ai':
                 return
             x = (event.x - getattr(self, 'board_offset_x', 0)) // self.cell_size
             y = (event.y - getattr(self, 'board_offset_y', 0)) // self.cell_size
@@ -251,39 +257,34 @@ if tk is not None:
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 没有棋子可下！')
                 return
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 放置 {chr(ord("A") + x)}{y + 1}。')
-            line = self.game.line_after_placement(x, y)
-            if line:
-                self.game.recover_line(line)
-                if self.game.replacement_is_available():
+            result, _, can_replace = self.game.process_stone_placement(x, y)
+            if result == 'recovered':
+                if can_replace:
                     self.waiting_replacement = True
                     self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 连成五子，请选择替换对方棋子。')
                     self.update_ui()
                     return
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 连成五子，但没有可替换的对方棋子。')
-
             self.conclude_turn()
 
         def perform_replacement(self, x, y):
             self.game.apply_replacement(x, y)
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 替换了 {chr(ord("A") + x)}{y + 1}。')
             self.waiting_replacement = False
-            line = self.game.line_after_placement(x, y)
-            if line:
-                self.game.recover_line(line)
-                if self.game.replacement_is_available():
+            result, _, can_replace = self.game.process_stone_placement(x, y)
+            if result == 'recovered':
+                if can_replace:
                     self.waiting_replacement = True
                     self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 再次连成五子，请继续替换。')
                     self.update_ui()
                     return
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 替换后连成五子，但无法继续替换，回合结束。')
-                self.conclude_turn()
-                return
-
             self.conclude_turn()
 
         def conclude_turn(self):
             self.update_ui()
             if self.game.has_lost(self.game.current):
+                self.game_over = True
                 messagebox.showinfo('游戏结束', f'{PLAYER_NAMES[self.game.current]} 棋子用完，{PLAYER_NAMES[self.game.opponent()]} 胜利！')
                 return
             self.game.current = self.game.opponent()
@@ -294,7 +295,7 @@ if tk is not None:
 
         def ai_take_turn(self):
             if self.waiting_replacement:
-                replacement = self.game.select_ai_replacement(self.game.current)
+                replacement = select_ai_replacement(self.game.board, self.game.current, self.game.ai_levels[self.game.current])
                 if replacement:
                     x, y = replacement
                     self.perform_replacement(x, y)
@@ -303,7 +304,7 @@ if tk is not None:
                 self.conclude_turn()
                 return
 
-            move = self.game.select_ai_move(self.game.current)
+            move = select_ai_move(self.game.board, self.game.current, self.game.ai_levels[self.game.current])
             if move is None:
                 messagebox.showinfo('游戏结束', f'{PLAYER_NAMES[self.game.current]} 无法落子，{PLAYER_NAMES[self.game.opponent()]} 胜利！')
                 return
