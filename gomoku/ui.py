@@ -94,6 +94,7 @@ if tk is not None:
             self.root.bind('<Control-L>', self._load_game)
             self.root.bind('<Key-slash>', lambda e: self._toggle_hotkeys())
             self.root.bind('<Key-question>', lambda e: self._toggle_hotkeys())
+            self.root.protocol('WM_DELETE_WINDOW', self._on_close)
             self.build_start_screen()
 
         def _apply_theme(self, theme_name=None):
@@ -170,6 +171,15 @@ if tk is not None:
         def _confirm_back_to_menu(self):
             if messagebox.askyesno('确认', '返回主菜单？当前对局将丢失。'):
                 self.build_start_screen()
+
+        def _on_close(self):
+            if self._in_game:
+                try:
+                    with open('gomoku_save.json', 'w') as f:
+                        json.dump(self.game.serialize(), f)
+                except Exception:
+                    pass
+            self.root.destroy()
 
         def _save_game(self, event=None):
             if not self._in_game:
@@ -341,6 +351,8 @@ if tk is not None:
             tk.Spinbox(fields, from_=5, to=99, textvariable=self.board_size_var, width=8, font=self.label_font, bd=0, relief='flat', bg=self.surface_bg, fg=self.text_main, insertbackground=self.text_main).grid(row=1, column=1, sticky='w', padx=6, pady=6)
 
             tk.Button(card, text='▶ START', command=self.start_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=14, bd=0).pack(pady=(18, 0), fill='x')
+            if os.path.exists('gomoku_save.json'):
+                tk.Button(card, text='▶ 继续上次游戏', command=self._load_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
             tk.Button(card, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground='#93c5fd', activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
             tk.Button(card, text='📊 对局统计', command=self._show_stats_dialog, font=self.button_font, bg=self.panel_bg, fg=self.text_main, activebackground=self.surface_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
             tk.Button(card, text='退出游戏', command=self.root.destroy, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')

@@ -20,7 +20,7 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
   - `game.py` — Game, PlacementResult, config persistence (`gomoku_config.json`), undo history, JSON serialization
   - `ai.py` — 3 difficulty levels (`simple`/`medium`/`hard`); `_score_all_moves` early-returns on winning move; `select_ai_replacement(quick=True)` for simulation
   - `cli.py` — interactive CLI, save/load (`gomoku_save.json`), coordinate parse (A1 or `1 1`)
-  - `ui.py` — tkinter GUI; Ctrl+S/L save/load, Esc/菜单确认弹窗, 对局统计, AI等级提示, 高亮缓存, _restart_game, _layout_changed两遍法, 默认1200x800+min900x640+_center_window, 主菜单bind_all全局滚轮, _start_canvas生命周期; `GameUI = None` if tkinter missing
+  - `ui.py` — tkinter GUI; Ctrl+S/L save/load, Esc/菜单确认弹窗, 对局统计, AI等级提示, 高亮缓存, _restart_game, _layout_changed两遍法, 默认1200x800+min900x640+_center_window, 主菜单bind_all全局滚轮, _start_canvas生命周期, _on_close自动存档, 主菜单继续上次游戏; `GameUI = None` if tkinter missing
 - `tests/` — unittest, no pytest plugins needed
 
 ## Game quirks
