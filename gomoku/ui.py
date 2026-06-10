@@ -374,6 +374,10 @@ if tk is not None:
                 self.game.player_types = {1: 'human', 2: 'human'}
                 self.game.ai_levels = {1: None, 2: None}
 
+            try:
+                os.remove('gomoku_save.json')
+            except Exception:
+                pass
             self.waiting_replacement = False
             self.game_over = False
             self.last_move = None
@@ -723,11 +727,19 @@ if tk is not None:
                 winner = self.game.opponent()
                 messagebox.showinfo('游戏结束', f'{PLAYER_NAMES[self.game.current]} 棋子用完，{PLAYER_NAMES[winner]} 胜利！')
                 self._show_game_stats(winner)
+                try:
+                    os.remove('gomoku_save.json')
+                except Exception:
+                    pass
                 return
             if self.game.is_draw():
                 self.game_over = True
                 messagebox.showinfo('游戏结束', '棋盘已满，平局！')
                 self._show_game_stats(None)
+                try:
+                    os.remove('gomoku_save.json')
+                except Exception:
+                    pass
                 return
             self.game.current = self.game.opponent()
             self.waiting_replacement = False
