@@ -38,5 +38,10 @@ dist/
 # Analysis documents
 ANALYSIS.md
 
+# Runtime data
+gomoku_config.json
+gomoku_save.json
+gomoku_stats.json
+
 # pytest
 .pytest_cache/

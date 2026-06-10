@@ -19,6 +19,52 @@ DEFAULT_CONFIG = {
     'starting_stones': 30,
     'ai_delay_ms': 300,
 }
+STATS_FILE = os.path.join(os.path.dirname(__file__), '..', 'gomoku_stats.json')
+DEFAULT_STATS = {
+    'total_games': 0,
+    'wins': {1: 0, 2: 0},
+    'draws': 0,
+    'moves': {1: 0, 2: 0},
+    'recoveries': {1: 0, 2: 0},
+    'total_time': {1: 0.0, 2: 0.0},
+}
+
+
+def save_stats(stats: dict):
+    try:
+        with open(STATS_FILE, 'w') as f:
+            json.dump(stats, f)
+    except Exception:
+        pass
+
+
+def load_stats() -> dict:
+    try:
+        if os.path.exists(STATS_FILE):
+            with open(STATS_FILE) as f:
+                data = json.load(f)
+            result = DEFAULT_STATS.copy()
+            result.update(data)
+            for key in ('wins', 'moves', 'recoveries', 'total_time'):
+                result[key] = {int(k): v for k, v in result[key].items()}
+            return result
+    except Exception:
+        pass
+    return dict(DEFAULT_STATS)
+
+
+def compute_game_stats(game: 'Game', winner: Optional[int]) -> dict:
+    b_moves = sum(1 for m in game.move_log if m['player'] == 1)
+    w_moves = sum(1 for m in game.move_log if m['player'] == 2)
+    b_rec = sum(m.get('recovered', 0) for m in game.move_log if m['player'] == 1)
+    w_rec = sum(m.get('recovered', 0) for m in game.move_log if m['player'] == 2)
+    return {
+        'wins': {1: 1 if winner == 1 else 0, 2: 1 if winner == 2 else 0},
+        'draws': 1 if winner is None else 0,
+        'moves': {1: b_moves, 2: w_moves},
+        'recoveries': {1: b_rec, 2: w_rec},
+        'total_time': {1: game.timers[1], 2: game.timers[2]},
+    }
 
 
 def save_config(**kwargs):

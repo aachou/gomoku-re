@@ -45,4 +45,5 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
 - `select_ai_replacement(..., quick=True)` is the lightweight version used inside simulation (no cloning); `quick=False` (default) is the full version used in actual play
 - `_simulate_placement` now passes `level` to `select_ai_replacement` for consistent replacement logic in simulation
 - `Game.serialize()` includes `timers` and `history` for full save/load fidelity
+- Stats persisted in `gomoku_stats.json` (total_games, wins, draws, moves, recoveries, total_time); functions: `load_stats`, `save_stats`, `compute_game_stats` in `game.py`; UI via `_show_stats_dialog`/`_persist_game_stats` in `ui.py`
 - CI: no CI workflow present currently

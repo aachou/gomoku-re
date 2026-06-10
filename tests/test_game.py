@@ -288,6 +288,55 @@ class TestGame(unittest.TestCase):
         self.assertEqual(b_moves, 1)
         self.assertEqual(w_moves, 1)
 
+    def test_compute_game_stats_winner(self):
+        from gomoku.game import compute_game_stats
+        g = Game()
+        g.do_placement(0, 0)
+        g.current = 2
+        g.do_placement(0, 1)
+        stats = compute_game_stats(g, 1)
+        self.assertEqual(stats['wins'][1], 1)
+        self.assertEqual(stats['wins'][2], 0)
+        self.assertEqual(stats['draws'], 0)
+        self.assertEqual(stats['moves'][1], 1)
+        self.assertEqual(stats['moves'][2], 1)
+
+    def test_compute_game_stats_draw(self):
+        from gomoku.game import compute_game_stats
+        g = Game()
+        g.do_placement(0, 0)
+        stats = compute_game_stats(g, None)
+        self.assertEqual(stats['wins'][1], 0)
+        self.assertEqual(stats['wins'][2], 0)
+        self.assertEqual(stats['draws'], 1)
+
+    def test_save_load_stats(self):
+        from gomoku.game import save_stats, load_stats, DEFAULT_STATS
+        save_stats(DEFAULT_STATS)
+        loaded = load_stats()
+        self.assertEqual(loaded['total_games'], 0)
+        self.assertEqual(loaded['wins'][1], 0)
+
+    def test_stats_persistence(self):
+        from gomoku.game import save_stats, load_stats, compute_game_stats
+        g = Game()
+        g.do_placement(0, 0)
+        g.current = 2
+        g.do_placement(0, 1)
+        cur = compute_game_stats(g, 1)
+        stats = load_stats()
+        stats['total_games'] += 1
+        for k in ('wins', 'moves', 'recoveries', 'total_time'):
+            for side in (1, 2):
+                stats[k][side] += cur[k][side]
+        stats['draws'] += cur['draws']
+        save_stats(stats)
+        loaded = load_stats()
+        self.assertEqual(loaded['total_games'], 1)
+        self.assertEqual(loaded['wins'][1], 1)
+        self.assertEqual(loaded['moves'][1], 1)
+        self.assertEqual(loaded['moves'][2], 1)
+
 
 if __name__ == '__main__':
     unittest.main()

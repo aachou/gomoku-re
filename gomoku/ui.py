@@ -11,7 +11,7 @@ import json
 import os
 import time
 
-from .game import Game, PLAYER_NAMES, STARTING_STONES, save_config, load_config
+from .game import Game, PLAYER_NAMES, STARTING_STONES, save_config, load_config, save_stats, load_stats, compute_game_stats
 from .board import BOARD_SIZE
 from .ai import select_ai_move, select_ai_replacement
 
@@ -207,7 +207,23 @@ if tk is not None:
             except Exception:
                 self.status_var.set('载入失败！')
 
+        def _persist_game_stats(self, winner):
+            cur = compute_game_stats(self.game, winner)
+            stats = load_stats()
+            stats['total_games'] += 1
+            stats['wins'][1] += cur['wins'][1]
+            stats['wins'][2] += cur['wins'][2]
+            stats['draws'] += cur['draws']
+            stats['moves'][1] += cur['moves'][1]
+            stats['moves'][2] += cur['moves'][2]
+            stats['recoveries'][1] += cur['recoveries'][1]
+            stats['recoveries'][2] += cur['recoveries'][2]
+            stats['total_time'][1] += cur['total_time'][1]
+            stats['total_time'][2] += cur['total_time'][2]
+            save_stats(stats)
+
         def _show_game_stats(self, winner):
+            self._persist_game_stats(winner)
             moves = len(self.game.move_log)
             b_moves = sum(1 for m in self.game.move_log if m['player'] == 1)
             w_moves = sum(1 for m in self.game.move_log if m['player'] == 2)
@@ -215,15 +231,43 @@ if tk is not None:
             w_rec = sum(m.get('recovered', 0) for m in self.game.move_log if m['player'] == 2)
             b_time = self._format_time(self.game.timers[1])
             w_time = self._format_time(self.game.timers[2])
-            stats = (
+            msg = (
                 f'总步数：{moves}\n'
                 f'黑棋落子：{b_moves}，回收：{b_rec}，用时：{b_time}\n'
                 f'白棋落子：{w_moves}，回收：{w_rec}，用时：{w_time}'
             )
             if winner:
-                messagebox.showinfo('对局统计', f'{PLAYER_NAMES[winner]} 胜利！\n\n{stats}')
+                messagebox.showinfo('对局统计', f'{PLAYER_NAMES[winner]} 胜利！\n\n{msg}')
             else:
-                messagebox.showinfo('对局统计', f'平局！\n\n{stats}')
+                messagebox.showinfo('对局统计', f'平局！\n\n{msg}')
+
+        def _show_stats_dialog(self):
+            stats = load_stats()
+            if stats['total_games'] == 0:
+                messagebox.showinfo('对局统计', '暂无对局记录。')
+                return
+            b_win_pct = stats['wins'][1] / stats['total_games'] * 100
+            w_win_pct = stats['wins'][2] / stats['total_games'] * 100
+            draw_pct = stats['draws'] / stats['total_games'] * 100
+            b_avg_time = stats['total_time'][1] / max(stats['moves'][1], 1)
+            w_avg_time = stats['total_time'][2] / max(stats['moves'][2], 1)
+            msg = (
+                f'总局数：{stats["total_games"]}\n\n'
+                f'胜率\n'
+                f'  黑棋：{stats["wins"][1]} 胜 ({b_win_pct:.1f}%)\n'
+                f'  白棋：{stats["wins"][2]} 胜 ({w_win_pct:.1f}%)\n'
+                f'  平局：{stats["draws"]} ({draw_pct:.1f}%)\n\n'
+                f'落子\n'
+                f'  黑棋：{stats["moves"][1]} 手\n'
+                f'  白棋：{stats["moves"][2]} 手\n\n'
+                f'回收\n'
+                f'  黑棋：{stats["recoveries"][1]} 次\n'
+                f'  白棋：{stats["recoveries"][2]} 次\n\n'
+                f'平均每步用时\n'
+                f'  黑棋：{self._format_time(b_avg_time)}\n'
+                f'  白棋：{self._format_time(w_avg_time)}'
+            )
+            messagebox.showinfo('累计对局统计', msg)
 
         def build_start_screen(self):
             self._start_canvas = None
@@ -298,6 +342,7 @@ if tk is not None:
 
             tk.Button(card, text='▶ START', command=self.start_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=14, bd=0).pack(pady=(18, 0), fill='x')
             tk.Button(card, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground='#93c5fd', activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
+            tk.Button(card, text='📊 对局统计', command=self._show_stats_dialog, font=self.button_font, bg=self.panel_bg, fg=self.text_main, activebackground=self.surface_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
             tk.Button(card, text='退出游戏', command=self.root.destroy, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
 
         def start_game(self):
@@ -402,6 +447,7 @@ if tk is not None:
             tk.Button(footer, text='↶ 悔棋', command=self.perform_undo, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='↻ 重新开始', command=self._restart_game, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+            tk.Button(footer, text='📊 统计', command=self._show_stats_dialog, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='← 主菜单', command=self._confirm_back_to_menu, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
 
         def _update_speed_label(self):
