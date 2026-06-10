@@ -159,17 +159,29 @@ if tk is not None:
         def _on_escape(self, event=None):
             if not self._in_game:
                 return
-            if messagebox.askyesno('确认', '返回主菜单？当前对局将丢失。'):
+            if self.game_over:
+                self.build_start_screen()
+                return
+            if messagebox.askyesno('确认', '返回主菜单？游戏将自动保存，下次可继续。'):
+                self._save_game()
                 self.build_start_screen()
 
         def _restart_game(self):
             if not self._in_game:
                 return
-            if messagebox.askyesno('确认', '重新开始当前对局？'):
+            if self.game_over:
+                self.start_game()
+                return
+            if messagebox.askyesno('确认', '重新开始当前对局？游戏将自动保存，下次可继续。'):
+                self._save_game()
                 self.start_game()
 
         def _confirm_back_to_menu(self):
-            if messagebox.askyesno('确认', '返回主菜单？当前对局将丢失。'):
+            if self.game_over:
+                self.build_start_screen()
+                return
+            if messagebox.askyesno('确认', '返回主菜单？游戏将自动保存，下次可继续。'):
+                self._save_game()
                 self.build_start_screen()
 
         def _on_close(self):
@@ -465,6 +477,7 @@ if tk is not None:
             tk.Button(footer, text='↻ 重新开始', command=self._restart_game, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='📊 统计', command=self._show_stats_dialog, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='← 主菜单', command=self._confirm_back_to_menu, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+            tk.Button(footer, text='退出', command=self._on_close, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
 
         def _update_speed_label(self):
             val = self.ai_delay_var.get()
