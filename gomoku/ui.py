@@ -150,6 +150,12 @@ if tk is not None:
             if messagebox.askyesno('确认', '返回主菜单？当前对局将丢失。'):
                 self.build_start_screen()
 
+        def _restart_game(self):
+            if not self._in_game:
+                return
+            if messagebox.askyesno('确认', '重新开始当前对局？'):
+                self.start_game()
+
         def _confirm_back_to_menu(self):
             if messagebox.askyesno('确认', '返回主菜单？当前对局将丢失。'):
                 self.build_start_screen()
@@ -379,7 +385,7 @@ if tk is not None:
             footer.pack(fill='x')
             tk.Button(footer, text='↶ 悔棋', command=self.perform_undo, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
-            tk.Button(footer, text='↻ 重新开始', command=self._confirm_back_to_menu, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+            tk.Button(footer, text='↻ 重新开始', command=self._restart_game, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='← 主菜单', command=self._confirm_back_to_menu, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
 
         def _update_speed_label(self):
@@ -396,12 +402,20 @@ if tk is not None:
         def _layout_changed(self, w, h):
             cols = self.game.size
             rows = self.game.size
-            cell_w = max(6, w // cols)
-            cell_h = max(6, h // rows)
+            raw_cell = max(6, min(w // cols, h // rows))
+            fs_est = max(8, raw_cell // 2)
+            off_est = raw_cell // 2 + 4
+            margin_est = off_est + fs_est + 4
+            available_w = max(1, w - 2 * margin_est)
+            available_h = max(1, h - 2 * margin_est)
+            cell_w = max(6, available_w // cols)
+            cell_h = max(6, available_h // rows)
             new_cell_size = min(cell_w, cell_h)
             board_w = new_cell_size * cols
             board_h = new_cell_size * rows
-            label_margin = new_cell_size // 2 + 8
+            fs = max(8, new_cell_size // 2)
+            off = new_cell_size // 2 + 4
+            label_margin = off + fs + 4
             new_ox = max(label_margin, (w - board_w) // 2)
             new_oy = max(label_margin, (h - board_h) // 2)
             if (new_cell_size != self.cell_size or new_ox != self.board_offset_x or new_oy != self.board_offset_y):
