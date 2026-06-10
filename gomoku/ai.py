@@ -9,7 +9,9 @@ from .board import (
 AI_LEVELS = ['simple', 'medium', 'hard']
 
 
-def select_ai_move(board: Board, player: int, level: str) -> Tuple[int, int]:
+def select_ai_move(board: Board, player: int, level: str) -> Optional[Tuple[int, int]]:
+    if not board.legal_moves():
+        return None
     if level == 'simple':
         return _simple_move(board, player)
     if level == 'medium':

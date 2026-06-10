@@ -310,6 +310,85 @@ class TestGame(unittest.TestCase):
         self.assertEqual(stats['wins'][2], 0)
         self.assertEqual(stats['draws'], 1)
 
+    def test_undo_with_multiple_log_entries(self):
+        g = Game()
+        g.do_placement(7, 7)
+        g.current = 2
+        g.do_placement(7, 8)
+        g.current = 1
+        g.save_snapshot()
+        g.do_replacement(7, 8)
+        self.assertEqual(len(g.move_log), 3)
+        self.assertTrue(g.undo())
+        self.assertEqual(len(g.move_log), 2)
+        self.assertEqual(g.board.get(7, 7), 1)
+        self.assertEqual(g.board.get(7, 8), 2)
+
+    def test_serialize_empty(self):
+        g = Game()
+        data = g.serialize()
+        g2 = Game.deserialize(data)
+        self.assertEqual(g2.supply[1], STARTING_STONES)
+        self.assertEqual(g2.current, 1)
+        self.assertTrue(g2.board.is_empty(7, 7))
+        self.assertEqual(len(g2.board.legal_moves()), 225)
+
+    def test_is_draw_with_supply_exhaustion_and_full_board(self):
+        g = Game(size=5, starting_stones=0)
+        g.supply = {1: 0, 2: 0}
+        for y in range(5):
+            for x in range(5):
+                g.board.set(x, y, 1 if (x + y) % 2 == 0 else 2)
+        g.board._rebuild_cache()
+        self.assertTrue(g.board.is_full())
+        self.assertFalse(g.is_draw())
+
+    def test_recovery_supply_correct(self):
+        g = Game(starting_stones=5)
+        for x in range(4):
+            g.place_stone(x, 7)
+        self.assertEqual(g.supply[1], 1)
+        g.place_stone(4, 7)
+        g.process_stone_placement(4, 7)
+        self.assertEqual(g.supply[1], 5)
+
+    def test_recovery_supply_overflow(self):
+        g = Game(starting_stones=5)
+        g.supply[1] = 10
+        g.supply[2] = 10
+        for x in range(5):
+            g.board.set(x, 7, 1)
+        g.board._rebuild_cache()
+        g.board.set(0, 7, 0)
+        g.board.set(0, 0, 2)
+        g.board._rebuild_cache()
+        g.place_stone(0, 7)
+        g.process_stone_placement(0, 7)
+        self.assertGreater(g.supply[1], 10)
+
+    def test_complex_cache_coherence(self):
+        from gomoku.board import Board
+        b = Board()
+        b.set(7, 7, 1)
+        b.set(7, 8, 2)
+        b.set(6, 7, 1)
+        b.set(8, 7, 1)
+        b.set(9, 7, 1)
+        b.set(10, 7, 1)
+        b.remove_line([(6, 7), (7, 7), (8, 7), (9, 7)])
+        self.assertTrue(b.is_empty(7, 7))
+        self.assertEqual(b._stone_count[1], 1)
+        self.assertEqual(b._stone_count[2], 1)
+        self.assertIn((7, 8), b._player_cells[2])
+
+    def test_save_load_stats_corrupt_file(self):
+        from gomoku.game import save_stats, load_stats, DEFAULT_STATS, STATS_FILE
+        with open(STATS_FILE, 'w') as f:
+            f.write('corrupt json')
+        loaded = load_stats()
+        self.assertEqual(loaded['total_games'], 0)
+        self.assertEqual(loaded['wins'][1], 0)
+
     def test_save_load_stats(self):
         from gomoku.game import save_stats, load_stats, DEFAULT_STATS
         save_stats(DEFAULT_STATS)

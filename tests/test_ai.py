@@ -151,6 +151,25 @@ class TestAI(unittest.TestCase):
         x, y = select_ai_move(b, 1, 'medium')
         self.assertEqual((x, y), (4, 0))
 
+    def test_ai_hard_blocks_opponent_five_exact(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 2)
+        x, y = select_ai_move(b, 1, 'hard')
+        self.assertEqual((x, y), (4, 7))
+
+    def test_ai_no_legal_moves(self):
+        b = Board(5)
+        for y in range(5):
+            for x in range(5):
+                b.set(x, y, 1 if (x + y) % 2 == 0 else 2)
+        move = select_ai_move(b, 1, 'simple')
+        self.assertIsNone(move)
+        move = select_ai_move(b, 1, 'medium')
+        self.assertIsNone(move)
+        move = select_ai_move(b, 1, 'hard')
+        self.assertIsNone(move)
+
 
 if __name__ == '__main__':
     unittest.main()

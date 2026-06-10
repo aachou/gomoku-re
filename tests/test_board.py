@@ -179,6 +179,33 @@ class TestBoard(unittest.TestCase):
         self.assertFalse(c.has_immediate_five(1))
         self.assertTrue(b.has_immediate_five(1))
 
+    def test_set_replacement_path(self):
+        b = Board()
+        b.set(7, 7, 1)
+        self.assertEqual(b._stone_count[1], 1)
+        self.assertEqual(b._stone_count[2], 0)
+        self.assertIn((7, 7), b._player_cells[1])
+        self.assertNotIn((7, 7), b._player_cells[2])
+        self.assertNotIn((7, 7), b._empty_cells)
+
+        b.set(7, 7, 2)
+        self.assertEqual(b._stone_count[1], 0)
+        self.assertEqual(b._stone_count[2], 1)
+        self.assertNotIn((7, 7), b._player_cells[1])
+        self.assertIn((7, 7), b._player_cells[2])
+        self.assertNotIn((7, 7), b._empty_cells)
+
+    def test_find_connected_line_more_than_five(self):
+        b = Board()
+        for x in range(7):
+            b.set(x, 7, 1)
+        line = b.find_connected_line(3, 7, 1)
+        self.assertIsNotNone(line)
+        self.assertEqual(len(line), 5)
+        for x, y in line:
+            self.assertEqual(y, 7)
+            self.assertIn(x, range(7))
+
     def test_potential_around_limited_to_5_steps(self):
         b = Board(19)
         b.set(9, 9, 1)

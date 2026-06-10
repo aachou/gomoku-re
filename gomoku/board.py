@@ -174,9 +174,10 @@ class Board:
             self._board_potential[2] += s2
 
         if old != 0:
-            self._empty_cells.add((x, y))
             self._stone_count[old] -= 1
             self._player_cells[old].discard((x, y))
+            if value == 0:
+                self._empty_cells.add((x, y))
         if value != 0:
             self._empty_cells.discard((x, y))
             self._stone_count[value] += 1

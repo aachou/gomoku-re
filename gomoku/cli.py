@@ -4,10 +4,8 @@ import time
 from typing import Optional, Tuple
 
 from .ai import select_ai_move, select_ai_replacement
-from .game import Game, PLAYER_NAMES, STARTING_STONES
+from .game import Game, PLAYER_NAMES, STARTING_STONES, SAVE_FILE
 from .board import Board, BOARD_SIZE
-
-SAVE_FILE = os.path.join(os.path.dirname(__file__), '..', 'gomoku_save.json')
 
 
 def setup(game: Game):
@@ -120,7 +118,7 @@ def _handle_command(raw: str, game: Game) -> Optional[str]:
             print('已保存。')
         except Exception as e:
             print(f'保存失败: {e}')
-        return None
+        return ''
     if cmd == 'load':
         _load_game(game)
         return 'refresh'
@@ -160,7 +158,7 @@ def input_replacement(game: Game) -> Optional[Tuple[int, int]]:
             return None
         if result == 'refresh':
             game.board.render()
-            continue
+            return (-1, -1)
         if result is not None:
             continue
         coord = parse_coordinate(raw, game.board)
@@ -194,7 +192,7 @@ def _handle_line_loop(game: Game, x: int, y: int) -> bool:
         else:
             print(f'AI({game.ai_levels[game.current]}) 思考中…')
             rep = select_ai_replacement(game.board, game.current, game.ai_levels[game.current])
-        if rep is None:
+        if rep is None or rep == (-1, -1):
             break
         rx, ry = rep
         result = game.do_replacement(rx, ry)
@@ -240,7 +238,11 @@ def play(game: Game):
             if game.player_types[1] == 'ai' and game.player_types[2] == 'ai':
                 time.sleep(0.3)
             print(f'AI({game.ai_levels[game.current]}) 思考中…')
-            x, y = select_ai_move(game.board, game.current, game.ai_levels[game.current])
+            move = select_ai_move(game.board, game.current, game.ai_levels[game.current])
+            if move is None:
+                print('无可落子位置，游戏结束。')
+                return
+            x, y = move
             print(f'AI({game.ai_levels[game.current]}) 选择 {chr(ord("A") + x)}{y + 1}')
 
         _handle_line_loop(game, x, y)

@@ -12,6 +12,7 @@ class PlacementResult(NamedTuple):
 
 STARTING_STONES = 30
 PLAYER_NAMES = {1: '黑棋', 2: '白棋'}
+SAVE_FILE = os.path.join(os.path.dirname(__file__), '..', 'gomoku_save.json')
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), '..', 'gomoku_config.json')
 DEFAULT_CONFIG = {
     'ai_level': 'medium',
@@ -131,6 +132,7 @@ class Game:
             'grid': [row.copy() for row in self.board.grid],
             'supply': self.supply.copy(),
             'current': self.current,
+            'move_log_len': len(self.move_log),
         })
 
     def undo(self):
@@ -141,7 +143,7 @@ class Game:
         self.board._rebuild_cache()
         self.supply = snap['supply'].copy()
         self.current = snap['current']
-        if self.move_log:
+        while len(self.move_log) > snap['move_log_len']:
             self.move_log.pop()
         return True
 

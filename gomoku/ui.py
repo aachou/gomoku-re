@@ -10,8 +10,9 @@ except ImportError:
 import json
 import os
 import time
+import traceback
 
-from .game import Game, PLAYER_NAMES, STARTING_STONES, save_config, load_config, save_stats, load_stats, compute_game_stats
+from .game import Game, PLAYER_NAMES, STARTING_STONES, SAVE_FILE, save_config, load_config, save_stats, load_stats, compute_game_stats
 from .board import BOARD_SIZE
 from .ai import select_ai_move, select_ai_replacement
 
@@ -65,6 +66,7 @@ if tk is not None:
             self._highlight_color = '#ef4444'
             self._in_game = False
             self._highlight_cells = []
+            self._ai_job = None
             self._start_canvas = None
             self.buttons = []
             self.level_var.set(config.get('ai_level', 'medium'))
@@ -96,6 +98,8 @@ if tk is not None:
             self.root.bind('<Key-slash>', lambda e: self._toggle_hotkeys())
             self.root.bind('<Key-question>', lambda e: self._toggle_hotkeys())
             self.root.protocol('WM_DELETE_WINDOW', self._on_close)
+            if hasattr(self.root, 'report_callback_exception'):
+                self.root.report_callback_exception = self._on_tk_error
             self.build_start_screen()
             self.root.deiconify()
 
@@ -189,30 +193,34 @@ if tk is not None:
         def _on_close(self):
             if self._in_game:
                 try:
-                    with open('gomoku_save.json', 'w') as f:
+                    with open(SAVE_FILE, 'w') as f:
                         json.dump(self.game.serialize(), f)
                 except Exception:
                     pass
             self.root.destroy()
 
+        def _on_tk_error(self, exc, val, tb):
+            if self._in_game:
+                self._save_game()
+            traceback.print_exception(exc, val, tb)
+
         def _save_game(self, event=None):
             if not self._in_game:
                 return
-            save_path = 'gomoku_save.json'
             try:
-                with open(save_path, 'w') as f:
+                with open(SAVE_FILE, 'w') as f:
                     json.dump(self.game.serialize(), f)
                 self.status_var.set('游戏已保存。')
             except Exception:
                 self.status_var.set('保存失败！')
 
         def _load_game(self, event=None):
-            save_path = 'gomoku_save.json'
-            if not os.path.exists(save_path):
+            if not os.path.exists(SAVE_FILE):
                 self.status_var.set('未找到存档。')
                 return
+            self._cancel_ai()
             try:
-                with open(save_path) as f:
+                with open(SAVE_FILE) as f:
                     data = json.load(f)
                 self.game = Game.deserialize(data)
                 self.waiting_replacement = False
@@ -227,7 +235,7 @@ if tk is not None:
                 self._refresh_log(full=True)
                 self.status_var.set('游戏已载入。')
                 if self.game.player_types[self.game.current] == 'ai':
-                    self.root.after(300, self.ai_take_turn)
+                    self._schedule_ai(300)
             except Exception:
                 self.status_var.set('载入失败！')
 
@@ -365,7 +373,7 @@ if tk is not None:
             tk.Spinbox(fields, from_=5, to=99, textvariable=self.board_size_var, width=8, font=self.label_font, bd=0, relief='flat', bg=self.surface_bg, fg=self.text_main, insertbackground=self.text_main).grid(row=1, column=1, sticky='w', padx=4, pady=4)
 
             tk.Button(card, text='▶ START', command=self.start_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=10, bd=0).pack(pady=(12, 0), fill='x')
-            if os.path.exists('gomoku_save.json'):
+            if os.path.exists(SAVE_FILE):
                 tk.Button(card, text='▶ 继续上次游戏', command=self._load_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=10, bd=0).pack(pady=(6, 0), fill='x')
             tk.Button(card, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground='#93c5fd', activeforeground=self.text_main, relief='flat', padx=22, pady=10, bd=0).pack(pady=(6, 0), fill='x')
             tk.Button(card, text='📊 对局统计', command=self._show_stats_dialog, font=self.button_font, bg=self.panel_bg, fg=self.text_main, activebackground=self.surface_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=10, bd=0).pack(pady=(6, 0), fill='x')
@@ -389,7 +397,7 @@ if tk is not None:
                 self.game.ai_levels = {1: None, 2: None}
 
             try:
-                os.remove('gomoku_save.json')
+                os.remove(SAVE_FILE)
             except Exception:
                 pass
             self.waiting_replacement = False
@@ -398,6 +406,7 @@ if tk is not None:
             self._highlight_cells = []
             self._paused = False
             self._in_game = True
+            self._cancel_ai()
             new_theme = self.theme_var.get()
             if new_theme != self._theme_name:
                 self._apply_theme(new_theme)
@@ -413,7 +422,7 @@ if tk is not None:
             self.update_ui()
 
             if self.game.player_types[self.game.current] == 'ai':
-                self.root.after(300, self.ai_take_turn)
+                self._schedule_ai(300)
 
         def build_game_ui(self):
             self._start_canvas = None
@@ -484,12 +493,25 @@ if tk is not None:
             val = self.ai_delay_var.get()
             self.speed_label.config(text=f'{"慢" if val > 1000 else "中" if val > 300 else "快"} ({val}ms)')
 
+        def _cancel_ai(self):
+            if self._ai_job:
+                self.root.after_cancel(self._ai_job)
+                self._ai_job = None
+
+        def _schedule_ai(self, delay):
+            self._cancel_ai()
+            self._ai_job = self.root.after(delay, self._ai_take_turn_wrapper)
+
+        def _ai_take_turn_wrapper(self):
+            self._ai_job = None
+            self.ai_take_turn()
+
         def toggle_pause(self):
             self._paused = not self._paused
             self.pause_btn.config(text='▶ 继续' if self._paused else '⏸ 暂停')
             if not self._paused:
                 if self.game.player_types[self.game.current] == 'ai' and not self.waiting_replacement and not self.game_over:
-                    self.root.after(100, self.ai_take_turn)
+                    self._schedule_ai(100)
 
         def _layout_changed(self, w, h):
             cols = self.game.size
@@ -632,22 +654,7 @@ if tk is not None:
             if not self.waiting_replacement:
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 请落子。')
 
-        def _refresh_log(self, full=False):
-            if full or not self.game.move_log:
-                self.log_listbox.delete(0, 'end')
-                for entry in self.game.move_log:
-                    p = PLAYER_NAMES[entry['player']]
-                    pos = f'{chr(ord("A") + entry["x"])}{entry["y"] + 1}'
-                    if entry['action'] == 'place':
-                        text = f'{p} 落子 {pos}'
-                        if entry['recovered']:
-                            text += f' 回收{entry["recovered"]}'
-                    else:
-                        text = f'{p} 替换 {pos}'
-                    self.log_listbox.insert('end', text)
-                self.log_listbox.see('end')
-                return
-            entry = self.game.move_log[-1]
+        def _format_log_entry(self, entry):
             p = PLAYER_NAMES[entry['player']]
             pos = f'{chr(ord("A") + entry["x"])}{entry["y"] + 1}'
             if entry['action'] == 'place':
@@ -656,7 +663,15 @@ if tk is not None:
                     text += f' 回收{entry["recovered"]}'
             else:
                 text = f'{p} 替换 {pos}'
-            self.log_listbox.insert('end', text)
+            return text
+
+        def _refresh_log(self, full=False):
+            if full:
+                self.log_listbox.delete(0, 'end')
+                for entry in self.game.move_log:
+                    self.log_listbox.insert('end', self._format_log_entry(entry))
+            else:
+                self.log_listbox.insert('end', self._format_log_entry(self.game.move_log[-1]))
             self.log_listbox.see('end')
 
         def on_canvas_click(self, event):
@@ -676,6 +691,7 @@ if tk is not None:
                     self.update_ui()
 
         def perform_undo(self):
+            self._cancel_ai()
             if not self.game.undo():
                 return
             self.waiting_replacement = False
@@ -688,9 +704,10 @@ if tk is not None:
             self._refresh_log(full=True)
             self.status_var.set('已悔棋。')
             if self.game.player_types[self.game.current] == 'ai':
-                self.root.after(300, self.ai_take_turn)
+                self._schedule_ai(300)
 
         def perform_placement(self, x, y):
+            self.game.save_snapshot()
             self.game.start_turn_timer()
             result = self.game.do_placement(x, y)
             if result is None:
@@ -742,7 +759,7 @@ if tk is not None:
                 messagebox.showinfo('游戏结束', f'{PLAYER_NAMES[self.game.current]} 棋子用完，{PLAYER_NAMES[winner]} 胜利！')
                 self._show_game_stats(winner)
                 try:
-                    os.remove('gomoku_save.json')
+                    os.remove(SAVE_FILE)
                 except Exception:
                     pass
                 return
@@ -751,7 +768,7 @@ if tk is not None:
                 messagebox.showinfo('游戏结束', '棋盘已满，平局！')
                 self._show_game_stats(None)
                 try:
-                    os.remove('gomoku_save.json')
+                    os.remove(SAVE_FILE)
                 except Exception:
                     pass
                 return
@@ -760,11 +777,12 @@ if tk is not None:
             self.update_ui()
             if self.game.player_types[self.game.current] == 'ai':
                 delay = self.ai_delay_var.get()
-                self.root.after(delay, self.ai_take_turn)
+                self._schedule_ai(delay)
 
         def ai_take_turn(self):
             if self._paused or self.game_over:
                 return
+            self.game.save_snapshot()
             level = self.game.ai_levels.get(self.game.current, 'medium')
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} AI({level}) 思考中…')
             if self.waiting_replacement:
@@ -774,7 +792,7 @@ if tk is not None:
                     self.perform_replacement(x, y)
                     if self.waiting_replacement:
                         delay = self.ai_delay_var.get()
-                        self.root.after(delay, self.ai_take_turn)
+                        self._schedule_ai(delay)
                     return
                 self.waiting_replacement = False
                 self.conclude_turn()
@@ -788,7 +806,7 @@ if tk is not None:
             self.perform_placement(x, y)
             if self.waiting_replacement:
                 delay = self.ai_delay_var.get()
-                self.root.after(delay, self.ai_take_turn)
+                self._schedule_ai(delay)
 
         def run(self):
             self.root.mainloop()
