@@ -34,7 +34,6 @@ if tk is not None:
             self.status_var = tk.StringVar()
             self.starting_stones_var = tk.IntVar(value=STARTING_STONES)
             self.board_size_var = tk.IntVar(value=BOARD_SIZE)
-            self.cell_font_size = 12
             self.board_offset_x = 0
             self.board_offset_y = 0
             self.fullscreen = True
@@ -72,7 +71,7 @@ if tk is not None:
             tk.Label(section, text='对战模式', font=self.label_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
             opt_frame = tk.Frame(section, bg=self.card_bg)
             opt_frame.pack(anchor='w', pady=(8, 8))
-            for text, value in [('双人', 'pvp'), ('人机', 'pve')]:
+            for text, value in [('双人', 'pvp'), ('人机', 'pve'), ('AI vs AI', 'pvai')]:
                 tk.Radiobutton(opt_frame, text=text, variable=self.mode_var, value=value, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=16, pady=12, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=8)
 
             section = tk.Frame(card, bg=self.card_bg)
@@ -109,11 +108,15 @@ if tk is not None:
             size = int(self.board_size_var.get())
             starting = int(self.starting_stones_var.get())
             self.game = Game(size=size, starting_stones=starting)
-            if self.mode_var.get() == 'pve':
+            mode = self.mode_var.get()
+            if mode == 'pve':
                 human_side = int(self.side_var.get())
                 ai_side = 3 - human_side
                 self.game.player_types = {human_side: 'human', ai_side: 'ai'}
                 self.game.ai_levels[ai_side] = self.level_var.get()
+            elif mode == 'pvai':
+                self.game.player_types = {1: 'ai', 2: 'ai'}
+                self.game.ai_levels = {1: self.level_var.get(), 2: self.level_var.get()}
             else:
                 self.game.player_types = {1: 'human', 2: 'human'}
                 self.game.ai_levels = {1: None, 2: None}
@@ -163,8 +166,9 @@ if tk is not None:
             new_cell_size = min(cell_w, cell_h)
             board_w = new_cell_size * cols
             board_h = new_cell_size * rows
-            new_ox = max(0, (w - board_w) // 2)
-            new_oy = max(0, (h - board_h) // 2)
+            margin = self.cell_size
+            new_ox = max(margin, (w - board_w) // 2)
+            new_oy = max(margin, (h - board_h) // 2)
             if (new_cell_size != self.cell_size or new_ox != self.board_offset_x or new_oy != self.board_offset_y):
                 self.cell_size = new_cell_size
                 self.board_offset_x = new_ox
@@ -177,6 +181,8 @@ if tk is not None:
             rows = self.game.size
             board_w = self.cell_size * cols
             board_h = self.cell_size * rows
+            fs = max(8, self.cell_size // 2)
+            off = self.cell_size // 2 + 4
             self.canvas.create_rectangle(self.board_offset_x, self.board_offset_y, self.board_offset_x + board_w, self.board_offset_y + board_h, fill=self.board_bg, outline=self.accent_soft, width=2, tags='grid')
             for i in range(1, cols):
                 x = self.board_offset_x + i * self.cell_size
@@ -184,6 +190,12 @@ if tk is not None:
             for j in range(1, rows):
                 y = self.board_offset_y + j * self.cell_size
                 self.canvas.create_line(self.board_offset_x + 2, y, self.board_offset_x + board_w - 2, y, fill='#94a3b8', tags='grid')
+            for i in range(cols):
+                x = self.board_offset_x + i * self.cell_size + self.cell_size // 2
+                self.canvas.create_text(x, self.board_offset_y - off, text=chr(ord('A') + i), font=(self.ui_font, fs), fill='#475569', tags='grid')
+            for j in range(rows):
+                y = self.board_offset_y + j * self.cell_size + self.cell_size // 2
+                self.canvas.create_text(self.board_offset_x - off, y, text=str(j + 1), font=(self.ui_font, fs), fill='#475569', tags='grid')
 
         def _draw_stones(self):
             radius = int(self.cell_size * 0.42)
@@ -197,10 +209,10 @@ if tk is not None:
                     cy = self.board_offset_y + y * self.cell_size + self.cell_size // 2
                     if cell == 1:
                         self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill='#1f2937', outline='#64748b', width=1, tags='stone')
-                        self.canvas.create_oval(cx - highlight_radius, cy - highlight_radius, cx - highlight_radius + highlight_radius, cy - highlight_radius + highlight_radius, fill='#475569', outline='', tags='stone')
+                        self.canvas.create_oval(cx - radius, cy - radius, cx - radius + 2 * highlight_radius, cy - radius + 2 * highlight_radius, fill='#475569', outline='', tags='stone')
                     elif cell == 2:
                         self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill='#f8fafc', outline='#cbd5e1', width=1, tags='stone')
-                        self.canvas.create_oval(cx - highlight_radius, cy - highlight_radius, cx - highlight_radius + highlight_radius, cy - highlight_radius + highlight_radius, fill='#ffffff', outline='', tags='stone')
+                        self.canvas.create_oval(cx - radius, cy - radius, cx - radius + 2 * highlight_radius, cy - radius + 2 * highlight_radius, fill='#ffffff', outline='', tags='stone')
 
         def _draw_highlights(self):
             if self.waiting_replacement and self.game.player_types[self.game.current] == 'human':
@@ -268,7 +280,8 @@ if tk is not None:
             self.conclude_turn()
 
         def perform_replacement(self, x, y):
-            self.game.apply_replacement(x, y)
+            if not self.game.apply_replacement(x, y):
+                return
             self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 替换了 {chr(ord("A") + x)}{y + 1}。')
             self.waiting_replacement = False
             result, _, can_replace = self.game.process_stone_placement(x, y)
@@ -299,6 +312,8 @@ if tk is not None:
                 if replacement:
                     x, y = replacement
                     self.perform_replacement(x, y)
+                    if self.waiting_replacement:
+                        self.root.after(300, self.ai_take_turn)
                     return
                 self.waiting_replacement = False
                 self.conclude_turn()
@@ -310,6 +325,8 @@ if tk is not None:
                 return
             x, y = move
             self.perform_placement(x, y)
+            if self.waiting_replacement:
+                self.root.after(300, self.ai_take_turn)
 
         def run(self):
             self.root.mainloop()

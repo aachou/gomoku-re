@@ -36,3 +36,6 @@ dist/
 
 # Analysis documents
 ANALYSIS.md
+
+# pytest
+.pytest_cache/

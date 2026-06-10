@@ -13,4 +13,3 @@ if __name__ == '__main__':
             cli_play(game)
         except KeyboardInterrupt:
             print('\n游戏已退出。')
-        sys.exit(0)

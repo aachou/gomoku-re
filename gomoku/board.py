@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 DIRECTIONS = [(1, 0), (0, 1), (1, 1), (1, -1)]
 BOARD_SIZE = 15
@@ -9,6 +9,19 @@ class Board:
     def __init__(self, size=BOARD_SIZE):
         self.size = size
         self.grid = [[0] * size for _ in range(size)]
+        self._empty_cells: Set[Tuple[int, int]] = {(x, y) for y in range(size) for x in range(size)}
+        self._stone_count: List[int] = [0, 0, 0]
+
+    def _rebuild_cache(self):
+        self._empty_cells.clear()
+        self._stone_count = [0, 0, 0]
+        for y in range(self.size):
+            for x in range(self.size):
+                v = self.grid[y][x]
+                if v == 0:
+                    self._empty_cells.add((x, y))
+                else:
+                    self._stone_count[v] += 1
 
     def in_bounds(self, x, y):
         return 0 <= x < self.size and 0 <= y < self.size
@@ -17,13 +30,23 @@ class Board:
         return self.grid[y][x]
 
     def set(self, x, y, value):
+        old = self.grid[y][x]
+        if old == value:
+            return old
         self.grid[y][x] = value
+        if old != 0:
+            self._empty_cells.add((x, y))
+            self._stone_count[old] -= 1
+        if value != 0:
+            self._empty_cells.discard((x, y))
+            self._stone_count[value] += 1
+        return old
 
     def is_empty(self, x, y):
-        return self.get(x, y) == 0
+        return self.grid[y][x] == 0
 
     def legal_moves(self) -> List[Tuple[int, int]]:
-        return [(x, y) for y in range(self.size) for x in range(self.size) if self.is_empty(x, y)]
+        return list(self._empty_cells)
 
     def render(self):
         header = '   ' + ' '.join(chr(ord('A') + i) for i in range(self.size))
@@ -34,18 +57,18 @@ class Board:
         print()
 
     def is_full(self):
-        return all(cell != 0 for row in self.grid for cell in row)
+        return not self._empty_cells
 
     def scan_line(self, x, y, dx, dy, player):
         coords = [(x, y)]
-        for direction in (-1, 1):
-            step = direction
-            cx, cy = x + dx * step, y + dy * step
-            while self.in_bounds(cx, cy) and self.get(cx, cy) == player:
+        for sign in (-1, 1):
+            step = 1
+            cx, cy = x + dx * sign, y + dy * sign
+            while self.in_bounds(cx, cy) and self.grid[cy][cx] == player:
                 coords.append((cx, cy))
-                step += direction
-                cx, cy = x + dx * step, y + dy * step
-        coords.sort(key=lambda p: (p[0] * dx + p[1] * dy) if dx != 0 else p[1] if dy != 0 else 0)
+                step += 1
+                cx, cy = x + dx * step * sign, y + dy * step * sign
+        coords.sort(key=lambda p: p[0] * dx + p[1] * dy)
         return coords
 
     def find_connected_line(self, x, y, player) -> Optional[List[Tuple[int, int]]]:
@@ -62,10 +85,10 @@ class Board:
             self.set(x, y, 0)
 
     def count_opponent_stones(self, player):
-        opponent = 3 - player
-        return sum(1 for row in self.grid for cell in row if cell == opponent)
+        return self._stone_count[3 - player]
 
     def clone(self):
         clone = Board(self.size)
         clone.grid = [row.copy() for row in self.grid]
+        clone._rebuild_cache()
         return clone
