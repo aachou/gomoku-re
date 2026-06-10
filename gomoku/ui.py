@@ -70,6 +70,9 @@ if tk is not None:
             self.board_size_var.set(config.get('board_size', 15))
             self.starting_stones_var.set(config.get('starting_stones', 30))
             self.ai_delay_var.set(config.get('ai_delay_ms', 300))
+            self.root.geometry('1200x800')
+            self.root.minsize(900, 640)
+            self._center_window()
             self.root.attributes('-fullscreen', True)
             font_families = set(tkfont.families()) if tkfont is not None else set()
             preferred_fonts = ['Microsoft YaHei UI', 'Microsoft YaHei', 'SimHei', 'Segoe UI Variable', 'Segoe UI', 'Arial']
@@ -512,6 +515,19 @@ if tk is not None:
                 self.canvas.delete('stone')
                 self._draw_stones()
 
+        def _center_window(self):
+            self.root.update_idletasks()
+            geo = self.root.geometry()
+            import re
+            m = re.match(r'(\d+)x(\d+)', geo)
+            if m:
+                w, h = int(m.group(1)), int(m.group(2))
+                sw = self.root.winfo_screenwidth()
+                sh = self.root.winfo_screenheight()
+                x = max(0, (sw - w) // 2)
+                y = max(0, (sh - h) // 2)
+                self.root.geometry(f'+{x}+{y}')
+
         def toggle_fullscreen(self):
             self.fullscreen = not self.fullscreen
             if self.fullscreen:
@@ -520,6 +536,7 @@ if tk is not None:
             else:
                 self.root.attributes('-fullscreen', False)
                 self.root.geometry(self._windowed_geometry)
+                self._center_window()
 
         def _format_time(self, seconds):
             m = int(seconds // 60)
