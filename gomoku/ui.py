@@ -64,6 +64,7 @@ if tk is not None:
             self._highlight_color = '#ef4444'
             self._in_game = False
             self._highlight_cells = []
+            self._start_canvas = None
             self.buttons = []
             self.level_var.set(config.get('ai_level', 'medium'))
             self.board_size_var.set(config.get('board_size', 15))
@@ -144,6 +145,13 @@ if tk is not None:
                 self._hotkey_frame = None
             self._hotkeys_shown = False
 
+        def _start_screen_wheel(self, event):
+            if self._start_canvas:
+                try:
+                    self._start_canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+                except tk.TclError:
+                    self._start_canvas = None
+
         def _on_escape(self, event=None):
             if not self._in_game:
                 return
@@ -215,6 +223,8 @@ if tk is not None:
                 messagebox.showinfo('对局统计', f'平局！\n\n{stats}')
 
         def build_start_screen(self):
+            self._start_canvas = None
+            self.root.bind_all('<MouseWheel>', self._start_screen_wheel)
             for widget in self.root.winfo_children():
                 widget.destroy()
             self._in_game = False
@@ -233,10 +243,8 @@ if tk is not None:
             card.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
             card_win = canvas.create_window((10, 10), window=card, anchor='nw')
             canvas.bind('<Configure>', lambda e: canvas.itemconfig(card_win, width=e.width - 20))
-            def _on_mousewheel(e):
-                canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units')
-            canvas.bind('<MouseWheel>', _on_mousewheel)
-            card.bind('<MouseWheel>', _on_mousewheel)
+            self._start_canvas = canvas
+            self.root.bind_all('<MouseWheel>', self._start_screen_wheel)
 
             accent_bar = tk.Frame(card, bg=self.accent, height=4)
             accent_bar.pack(fill='x', side='top', pady=(0, 16))
@@ -330,6 +338,8 @@ if tk is not None:
                 self.root.after(300, self.ai_take_turn)
 
         def build_game_ui(self):
+            self._start_canvas = None
+            self.root.bind_all('<MouseWheel>', '')
             for widget in self.root.winfo_children():
                 widget.destroy()
 
