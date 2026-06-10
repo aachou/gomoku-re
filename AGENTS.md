@@ -6,9 +6,11 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
 
 ## Commands
 
-- `python main.py` — launch GUI (tkinter required; auto-fallback to CLI if unavailable)
-- `python main.py cli` — force CLI mode
-- `pytest` — run all tests (unittest-based, 46 tests)
+- `uv run python main.py` — launch GUI (tkinter required; auto-fallback to CLI if unavailable)
+- `uv run python main.py cli` — force CLI mode
+- `uv run pytest` — run all tests (unittest-based, 58 tests)
+- `python -m pytest tests/test_file.py::TestClass::test_method` — run a single test
+- `uv lock` — sync lockfile after dependency changes
 
 ## Architecture
 

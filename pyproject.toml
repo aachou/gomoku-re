@@ -1,0 +1,9 @@
+[project]
+name = "gomoku-re"
+version = "1.2.0"
+description = "不一样的五子棋 — Gomoku variant where 5-in-a-row recovers stones instead of winning"
+requires-python = ">=3.8"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
