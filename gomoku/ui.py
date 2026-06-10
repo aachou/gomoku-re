@@ -56,7 +56,7 @@ if tk is not None:
             self.board_offset_x = 0
             self.board_offset_y = 0
             self.fullscreen = True
-            self._windowed_geometry = None
+            self._windowed_geometry = '1200x800'
             self._paused = False
             self._timer_job = None
             self._hotkeys_shown = False
@@ -506,8 +506,7 @@ if tk is not None:
                 self.root.attributes('-fullscreen', True)
             else:
                 self.root.attributes('-fullscreen', False)
-                if self._windowed_geometry:
-                    self.root.geometry(self._windowed_geometry)
+                self.root.geometry(self._windowed_geometry)
 
         def _format_time(self, seconds):
             m = int(seconds // 60)
