@@ -47,6 +47,7 @@ gomoku-re/
 
 - Python 3.8+
 - 若需要桌面界面，请确保系统已安装并启用 `tkinter`。
+- 推荐使用 [uv](https://docs.astral.sh/uv/) 管理项目：`uv run main.py` 自动管理虚拟环境与依赖。
 
 ## 示例
 
