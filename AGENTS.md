@@ -8,7 +8,7 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
 
 - `uv run python main.py` — launch GUI (tkinter required; auto-fallback to CLI if unavailable)
 - `uv run python main.py cli` — force CLI mode
-- `uv run pytest` — run all tests (unittest-based, 65 tests)
+- `uv run pytest` — run all tests (unittest-based, 69 tests)
 - `python -m pytest tests/test_file.py::TestClass::test_method` — run a single test
 - `uv lock` — sync lockfile after dependency changes
 
@@ -20,7 +20,7 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
   - `game.py` — Game, PlacementResult, config persistence (`gomoku_config.json`), undo history, JSON serialization
   - `ai.py` — 3 difficulty levels (`simple`/`medium`/`hard`); `_score_all_moves` early-returns on winning move; `select_ai_replacement(quick=True)` for simulation
   - `cli.py` — interactive CLI, save/load (`gomoku_save.json`), coordinate parse (A1 or `1 1`)
-  - `ui.py` — tkinter GUI; Ctrl+S/L save/load, Esc/菜单确认弹窗, 对局统计, AI等级提示, 高亮缓存, _restart_game, _layout_changed两遍法, 默认1200x800+min900x640+_center_window, 主菜单bind_all全局滚轮, _start_canvas生命周期, _on_close自动存档, 主菜单继续上次游戏; `GameUI = None` if tkinter missing
+  - `ui.py` — tkinter GUI; Ctrl+S/L save/load, Esc/菜单确认弹窗, 对局统计, AI等级提示, 高亮缓存, _restart_game, _layout_changed两遍法, 默认1200x800+min900x640+_center_window, 主菜单bind_all全局滚轮, _start_canvas生命周期, _on_close自动存档, 主菜单继续上次游戏, withdraw/deiconify闪屏修复, 紧凑主菜单布局; `GameUI = None` if tkinter missing
 - `tests/` — unittest, no pytest plugins needed
 
 ## Game quirks
@@ -46,4 +46,6 @@ Gomoku variant ("不一样的五子棋") — 5-in-a-row does not win, instead th
 - `_simulate_placement` now passes `level` to `select_ai_replacement` for consistent replacement logic in simulation
 - `Game.serialize()` includes `timers` and `history` for full save/load fidelity
 - Stats persisted in `gomoku_stats.json` (total_games, wins, draws, moves, recoveries, total_time); functions: `load_stats`, `save_stats`, `compute_game_stats` in `game.py`; UI via `_show_stats_dialog`/`_persist_game_stats` in `ui.py`
+- `withdraw()`/`deiconify()` in `GameUI.__init__` eliminates window flash on startup
+- Game footer no longer has a standalone "退出" button; exit via window close (X), `_on_close` called from start screen "退出游戏" button, or 主菜单 auto-saves then navigates
 - CI: no CI workflow present currently

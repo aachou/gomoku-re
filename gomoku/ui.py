@@ -37,6 +37,7 @@ if tk is not None:
     class GameUI:
         def __init__(self):
             self.root = tk.Tk()
+            self.root.withdraw()
             self.root.title('不一样的五子棋')
             config = load_config()
             self._theme_name = config.get('theme', '默认')
@@ -96,6 +97,7 @@ if tk is not None:
             self.root.bind('<Key-question>', lambda e: self._toggle_hotkeys())
             self.root.protocol('WM_DELETE_WINDOW', self._on_close)
             self.build_start_screen()
+            self.root.deiconify()
 
         def _apply_theme(self, theme_name=None):
             if theme_name:
@@ -308,7 +310,7 @@ if tk is not None:
             canvas.pack(side='left', fill='both', expand=True)
             scrollbar.pack(side='right', fill='y')
 
-            card = tk.Frame(canvas, bg=self.card_bg, bd=0, highlightbackground='#1e293b', highlightthickness=1, padx=26, pady=26)
+            card = tk.Frame(canvas, bg=self.card_bg, bd=0, highlightbackground='#1e293b', highlightthickness=1, padx=20, pady=20)
             card.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
             card_win = canvas.create_window((10, 10), window=card, anchor='nw')
             canvas.bind('<Configure>', lambda e: canvas.itemconfig(card_win, width=e.width - 20))
@@ -316,58 +318,58 @@ if tk is not None:
             self.root.bind_all('<MouseWheel>', self._start_screen_wheel)
 
             accent_bar = tk.Frame(card, bg=self.accent, height=4)
-            accent_bar.pack(fill='x', side='top', pady=(0, 16))
+            accent_bar.pack(fill='x', side='top', pady=(0, 10))
             tk.Label(card, text='不一样的五子棋', font=self.title_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
-            tk.Label(card, text='未来风格对战 · AI 支持 · 自定义棋盘与棋子', font=self.label_font, bg=self.card_bg, fg=self.text_secondary).pack(anchor='w', pady=(6, 20))
+            tk.Label(card, text='未来风格对战 · AI 支持 · 自定义棋盘与棋子', font=self.label_font, bg=self.card_bg, fg=self.text_secondary).pack(anchor='w', pady=(4, 12))
 
             section = tk.Frame(card, bg=self.card_bg)
-            section.pack(fill='x', pady=(0, 12))
+            section.pack(fill='x', pady=(0, 6))
             tk.Label(section, text='对战模式', font=self.label_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
             opt_frame = tk.Frame(section, bg=self.card_bg)
-            opt_frame.pack(anchor='w', pady=(8, 8))
+            opt_frame.pack(anchor='w', pady=(4, 4))
             for text, value in [('双人', 'pvp'), ('人机', 'pve'), ('AI vs AI', 'pvai')]:
-                tk.Radiobutton(opt_frame, text=text, variable=self.mode_var, value=value, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=16, pady=12, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=8)
+                tk.Radiobutton(opt_frame, text=text, variable=self.mode_var, value=value, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=12, pady=8, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=6)
 
             section = tk.Frame(card, bg=self.card_bg)
-            section.pack(fill='x', pady=(0, 12))
+            section.pack(fill='x', pady=(0, 6))
             tk.Label(section, text='执棋方', font=self.label_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
             side_frame = tk.Frame(section, bg=self.card_bg)
-            side_frame.pack(anchor='w', pady=(8, 8))
+            side_frame.pack(anchor='w', pady=(4, 4))
             for text, value in [('黑棋', '1'), ('白棋', '2')]:
-                tk.Radiobutton(side_frame, text=text, variable=self.side_var, value=value, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=16, pady=12, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=8)
+                tk.Radiobutton(side_frame, text=text, variable=self.side_var, value=value, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=12, pady=8, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=6)
 
             section = tk.Frame(card, bg=self.card_bg)
-            section.pack(fill='x', pady=(0, 12))
+            section.pack(fill='x', pady=(0, 6))
             tk.Label(section, text='AI 难度', font=self.label_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
             level_frame = tk.Frame(section, bg=self.card_bg)
-            level_frame.pack(anchor='w', pady=(8, 8))
+            level_frame.pack(anchor='w', pady=(4, 4))
             for text, value in [('简单', 'simple'), ('中等', 'medium'), ('困难', 'hard')]:
-                tk.Radiobutton(level_frame, text=text, variable=self.level_var, value=value, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=16, pady=12, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=8)
+                tk.Radiobutton(level_frame, text=text, variable=self.level_var, value=value, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=12, pady=8, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=6)
 
             section = tk.Frame(card, bg=self.card_bg)
-            section.pack(fill='x', pady=(0, 12))
+            section.pack(fill='x', pady=(0, 6))
             tk.Label(section, text='主题', font=self.label_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
             theme_frame = tk.Frame(section, bg=self.card_bg)
-            theme_frame.pack(anchor='w', pady=(8, 8))
+            theme_frame.pack(anchor='w', pady=(4, 4))
             for name in list(THEMES.keys()):
-                tk.Radiobutton(theme_frame, text=name, variable=self.theme_var, value=name, command=self._preview_theme, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=16, pady=12, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=8)
+                tk.Radiobutton(theme_frame, text=name, variable=self.theme_var, value=name, command=self._preview_theme, bg=self.surface_bg, fg=self.text_main, selectcolor=self.accent, activebackground=self.panel_bg, activeforeground=self.text_main, font=self.label_font, indicatoron=0, padx=12, pady=8, bd=0, relief='flat', highlightthickness=0).pack(side='left', padx=6)
 
             section = tk.Frame(card, bg=self.card_bg)
-            section.pack(fill='x', pady=(0, 12))
+            section.pack(fill='x', pady=(0, 6))
             tk.Label(section, text='初始设置', font=self.label_font, bg=self.card_bg, fg=self.text_main).pack(anchor='w')
             fields = tk.Frame(section, bg=self.card_bg)
-            fields.pack(anchor='w', pady=(8, 0))
-            tk.Label(fields, text='棋子数：', font=self.label_font, bg=self.card_bg, fg=self.text_secondary).grid(row=0, column=0, sticky='w', padx=6, pady=6)
-            tk.Spinbox(fields, from_=5, to=500, textvariable=self.starting_stones_var, width=8, font=self.label_font, bd=0, relief='flat', bg=self.surface_bg, fg=self.text_main, insertbackground=self.text_main).grid(row=0, column=1, sticky='w', padx=6, pady=6)
-            tk.Label(fields, text='棋盘大小：', font=self.label_font, bg=self.card_bg, fg=self.text_secondary).grid(row=1, column=0, sticky='w', padx=6, pady=6)
-            tk.Spinbox(fields, from_=5, to=99, textvariable=self.board_size_var, width=8, font=self.label_font, bd=0, relief='flat', bg=self.surface_bg, fg=self.text_main, insertbackground=self.text_main).grid(row=1, column=1, sticky='w', padx=6, pady=6)
+            fields.pack(anchor='w', pady=(4, 0))
+            tk.Label(fields, text='棋子数：', font=self.label_font, bg=self.card_bg, fg=self.text_secondary).grid(row=0, column=0, sticky='w', padx=4, pady=4)
+            tk.Spinbox(fields, from_=5, to=500, textvariable=self.starting_stones_var, width=8, font=self.label_font, bd=0, relief='flat', bg=self.surface_bg, fg=self.text_main, insertbackground=self.text_main).grid(row=0, column=1, sticky='w', padx=4, pady=4)
+            tk.Label(fields, text='棋盘大小：', font=self.label_font, bg=self.card_bg, fg=self.text_secondary).grid(row=1, column=0, sticky='w', padx=4, pady=4)
+            tk.Spinbox(fields, from_=5, to=99, textvariable=self.board_size_var, width=8, font=self.label_font, bd=0, relief='flat', bg=self.surface_bg, fg=self.text_main, insertbackground=self.text_main).grid(row=1, column=1, sticky='w', padx=4, pady=4)
 
-            tk.Button(card, text='▶ START', command=self.start_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=14, bd=0).pack(pady=(18, 0), fill='x')
+            tk.Button(card, text='▶ START', command=self.start_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=10, bd=0).pack(pady=(12, 0), fill='x')
             if os.path.exists('gomoku_save.json'):
-                tk.Button(card, text='▶ 继续上次游戏', command=self._load_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
-            tk.Button(card, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground='#93c5fd', activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
-            tk.Button(card, text='📊 对局统计', command=self._show_stats_dialog, font=self.button_font, bg=self.panel_bg, fg=self.text_main, activebackground=self.surface_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
-            tk.Button(card, text='退出游戏', command=self.root.destroy, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=14, bd=0).pack(pady=(10, 0), fill='x')
+                tk.Button(card, text='▶ 继续上次游戏', command=self._load_game, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=22, pady=10, bd=0).pack(pady=(6, 0), fill='x')
+            tk.Button(card, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground='#93c5fd', activeforeground=self.text_main, relief='flat', padx=22, pady=10, bd=0).pack(pady=(6, 0), fill='x')
+            tk.Button(card, text='📊 对局统计', command=self._show_stats_dialog, font=self.button_font, bg=self.panel_bg, fg=self.text_main, activebackground=self.surface_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=10, bd=0).pack(pady=(6, 0), fill='x')
+            tk.Button(card, text='退出游戏', command=self._on_close, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=22, pady=10, bd=0).pack(pady=(6, 0), fill='x')
 
         def start_game(self):
             size = int(self.board_size_var.get())
@@ -477,7 +479,6 @@ if tk is not None:
             tk.Button(footer, text='↻ 重新开始', command=self._restart_game, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='📊 统计', command=self._show_stats_dialog, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='← 主菜单', command=self._confirm_back_to_menu, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
-            tk.Button(footer, text='退出', command=self._on_close, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
 
         def _update_speed_label(self):
             val = self.ai_delay_var.get()
