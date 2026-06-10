@@ -233,7 +233,10 @@ if tk is not None:
             card.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
             card_win = canvas.create_window((10, 10), window=card, anchor='nw')
             canvas.bind('<Configure>', lambda e: canvas.itemconfig(card_win, width=e.width - 20))
-            canvas.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
+            def _on_mousewheel(e):
+                canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units')
+            canvas.bind('<MouseWheel>', _on_mousewheel)
+            card.bind('<MouseWheel>', _on_mousewheel)
 
             accent_bar = tk.Frame(card, bg=self.accent, height=4)
             accent_bar.pack(fill='x', side='top', pady=(0, 16))
