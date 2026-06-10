@@ -34,8 +34,8 @@ gomoku-re/
 
 ## 玩法
 
-- 运行 `python main.py`：默认启动桌面 UI（如果系统支持 `tkinter`）。
-- 运行 `python main.py cli`：强制进入命令行模式。
+- 运行 `uv run main.py`（或 `python main.py`）：默认启动桌面 UI（如果系统支持 `tkinter`）。
+- 运行 `uv run main.py cli`（或 `python main.py cli`）：强制进入命令行模式。
 - 支持人机对战，AI 有简单、中等、困难三种难度。
 - 支持 AI vs AI 观战模式（可调速/暂停）。
 - 坐标格式支持 `A1` 或 `1 1`。
@@ -51,6 +51,9 @@ gomoku-re/
 ## 示例
 
 ```bash
+uv run main.py
+uv run main.py cli
+# 或直接用 python：
 python main.py
 python main.py cli
 ```
@@ -58,6 +61,8 @@ python main.py cli
 ## 测试
 
 ```bash
+uv run pytest
+# 或直接用 python：
 pytest
 ```
 
