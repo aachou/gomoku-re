@@ -45,11 +45,32 @@ def _light_score(board: Board, player: int, x: int, y: int) -> int:
     return score
 
 
+def _get_candidate_moves(board: Board) -> List[Tuple[int, int]]:
+    if not board._player_cells[1] and not board._player_cells[2]:
+        return board.legal_moves()
+    interesting = set()
+    for cells in board._player_cells.values():
+        for x, y in cells:
+            for dx in range(-2, 3):
+                nx = x + dx
+                if nx < 0 or nx >= board.size:
+                    continue
+                for dy in range(-2, 3):
+                    ny = y + dy
+                    if ny < 0 or ny >= board.size:
+                        continue
+                    if board.grid[ny][nx] == 0:
+                        interesting.add((nx, ny))
+    if not interesting:
+        return board.legal_moves()
+    return list(interesting)
+
+
 def _score_all_moves(board: Board, player: int) -> List[Tuple[float, int, int]]:
     opponent = 3 - player
     opp_has_five_now = board.has_immediate_five(opponent)
     scored = []
-    for x, y in board.legal_moves():
+    for x, y in _get_candidate_moves(board):
         score = _light_score(board, player, x, y)
         if opp_has_five_now and _would_form_five(board, opponent, x, y):
             score += 50000
@@ -69,28 +90,74 @@ def _medium_move(board: Board, player: int) -> Tuple[int, int]:
     return random.choice(best)
 
 
+def _evaluate_board(board: Board, player: int) -> float:
+    opponent = 3 - player
+    atk = board._board_potential[player]
+    dfs = board._board_potential[opponent]
+    score = atk * 1.1 - dfs * 1.2
+    if board.has_immediate_five(player):
+        score += 100000
+    if board.has_immediate_five(opponent):
+        score -= 100000
+    return score
+
+
+def _alpha_beta(board: Board, player: int, depth: int, alpha: float, beta: float,
+                level: str, ai_player: int) -> float:
+    if board.has_immediate_five(player):
+        return (100000 if player == ai_player else -100000) + depth * 1000
+
+    if depth == 0:
+        return _evaluate_board(board, ai_player)
+
+    scored = _score_all_moves(board, player)
+    if not scored:
+        return _evaluate_board(board, ai_player)
+
+    next_player = 3 - player
+
+    if player == ai_player:
+        value = -10**9
+        for _, x, y in scored[:10]:
+            sim = _simulate_placement(board, player, x, y, level)
+            v = _alpha_beta(sim, next_player, depth - 1, alpha, beta, level, ai_player)
+            if v > value:
+                value = v
+            if value >= beta:
+                return value
+            if value > alpha:
+                alpha = value
+        return value
+    else:
+        value = 10**9
+        for _, x, y in scored[:8]:
+            sim = _simulate_placement(board, player, x, y, level)
+            v = _alpha_beta(sim, next_player, depth - 1, alpha, beta, level, ai_player)
+            if v < value:
+                value = v
+            if value <= alpha:
+                return value
+            if value < beta:
+                beta = value
+        return value
+
+
 def _hard_move(board: Board, player: int, level: str = 'hard') -> Tuple[int, int]:
     scored = _score_all_moves(board, player)
     if not scored:
         return None
-    candidates = scored[:min(20, len(scored))]
-    opponent = 3 - player
+    candidates = scored[:min(10, len(scored))]
     best_move = (candidates[0][1], candidates[0][2])
     best_value = -10**9
 
     for _, x, y in candidates:
         sim = _simulate_placement(board, player, x, y, level)
-        atk = sim._board_potential[player]
-        dfs = sim._board_potential[opponent]
-
-        value = atk * 1.1 - dfs * 1.2
-        if sim.has_immediate_five(opponent):
-            value -= 50000
         if sim.has_immediate_five(player):
-            value += 100000
+            return (x, y)
 
-        if value > best_value:
-            best_value = value
+        v = _alpha_beta(sim, 3 - player, 1, -10**9, 10**9, level, player)
+        if v > best_value:
+            best_value = v
             best_move = (x, y)
 
     return best_move

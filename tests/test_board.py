@@ -1,5 +1,9 @@
 import unittest
-from gomoku.board import Board, BOARD_SIZE, DIRECTIONS
+from gomoku.board import (
+    Board, BOARD_SIZE, DIRECTIONS,
+    _pattern_score, _consecutive_count, _would_form_five,
+    _evaluate_direction, _evaluate_potential, _has_immediate_five,
+)
 
 
 class TestBoard(unittest.TestCase):
@@ -209,11 +213,223 @@ class TestBoard(unittest.TestCase):
     def test_potential_around_limited_to_5_steps(self):
         b = Board(19)
         b.set(9, 9, 1)
-        before = b._cell_potential.get((9, 8), [0, 0])[1]
+        before = b._cell_potential[8][9][1] if b._cell_potential[8][9] is not None else 0
         b.set(0, 0, 2)
         # cell (9, 8) is 10+ cells from (0, 0) — beyond 5-step limit, should be unchanged
-        after = b._cell_potential.get((9, 8), [0, 0])[1]
+        after = b._cell_potential[8][9][1] if b._cell_potential[8][9] is not None else 0
         self.assertEqual(before, after)
+
+
+class TestBoardInternals(unittest.TestCase):
+    # --- _pattern_score ---
+    def test_pattern_score_exact_table_entries(self):
+        self.assertEqual(_pattern_score(4, 2), 50000)
+        self.assertEqual(_pattern_score(4, 1), 5000)
+        self.assertEqual(_pattern_score(4, 0), 5000)
+        self.assertEqual(_pattern_score(3, 2), 3000)
+        self.assertEqual(_pattern_score(3, 1), 300)
+        self.assertEqual(_pattern_score(3, 0), 50)
+        self.assertEqual(_pattern_score(2, 2), 200)
+        self.assertEqual(_pattern_score(2, 1), 30)
+        self.assertEqual(_pattern_score(2, 0), 10)
+        self.assertEqual(_pattern_score(1, 2), 10)
+        self.assertEqual(_pattern_score(1, 1), 3)
+        self.assertEqual(_pattern_score(1, 0), 1)
+
+    def test_pattern_score_none(self):
+        self.assertEqual(_pattern_score(0, 0), 0)
+        self.assertEqual(_pattern_score(0, 2), 0)
+
+    def test_pattern_score_clamped_count(self):
+        self.assertEqual(_pattern_score(6, 2), 0)
+        self.assertEqual(_pattern_score(7, 0), 0)
+
+    def test_pattern_score_clamped_open_ends(self):
+        self.assertEqual(_pattern_score(3, 5), 3000)
+
+    # --- _consecutive_count ---
+    def test_consecutive_count_empty(self):
+        b = Board()
+        self.assertEqual(_consecutive_count(b, 7, 7, 1, 0, 1), 0)
+
+    def test_consecutive_count_one_side(self):
+        b = Board()
+        b.set(8, 7, 1)
+        self.assertEqual(_consecutive_count(b, 7, 7, 1, 0, 1), 1)
+
+    def test_consecutive_count_both_sides(self):
+        b = Board()
+        b.set(6, 7, 1)
+        b.set(8, 7, 1)
+        self.assertEqual(_consecutive_count(b, 7, 7, 1, 0, 1), 2)
+
+    def test_consecutive_count_opponent_stops(self):
+        b = Board()
+        b.set(8, 7, 2)
+        b.set(6, 7, 1)
+        self.assertEqual(_consecutive_count(b, 7, 7, 1, 0, 1), 1)
+
+    def test_consecutive_count_at_boundary(self):
+        b = Board()
+        b.set(1, 0, 1)
+        self.assertEqual(_consecutive_count(b, 0, 0, 1, 0, 1), 1)
+        self.assertEqual(_consecutive_count(b, 0, 0, 0, 1, 1), 0)
+
+    def test_consecutive_count_long_line(self):
+        b = Board()
+        for x in range(10):
+            b.set(x, 7, 1)
+        self.assertEqual(_consecutive_count(b, 5, 7, 1, 0, 1), 9)
+
+    # --- _would_form_five ---
+    def test_would_form_five_true_horizontal(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        self.assertTrue(_would_form_five(b, 1, 4, 7))
+
+    def test_would_form_five_true_vertical(self):
+        b = Board()
+        for y in range(4):
+            b.set(7, y, 1)
+        self.assertTrue(_would_form_five(b, 1, 7, 4))
+
+    def test_would_form_five_true_diagonal(self):
+        b = Board()
+        for i in range(4):
+            b.set(i, i, 1)
+        self.assertTrue(_would_form_five(b, 1, 4, 4))
+
+    def test_would_form_five_false_short(self):
+        b = Board()
+        for x in range(3):
+            b.set(x, 7, 1)
+        self.assertFalse(_would_form_five(b, 1, 4, 7))
+
+    def test_would_form_five_false_blocked(self):
+        b = Board()
+        b.set(0, 7, 1)
+        b.set(1, 7, 1)
+        b.set(2, 7, 1)
+        b.set(4, 7, 2)
+        self.assertFalse(_would_form_five(b, 1, 3, 7))
+
+    def test_would_form_five_edge_of_board(self):
+        b = Board()
+        for y in range(4):
+            b.set(0, y, 1)
+        self.assertTrue(_would_form_five(b, 1, 0, 4))
+        self.assertFalse(_would_form_five(b, 1, 1, 4))
+
+    # --- _evaluate_direction ---
+    def test_evaluate_direction_empty(self):
+        b = Board()
+        self.assertEqual(_evaluate_direction(1, 7, 7, 1, 0, b), 0)
+
+    def test_evaluate_direction_one_stone_one_end(self):
+        b = Board()
+        b.set(8, 7, 1)
+        self.assertEqual(_evaluate_direction(1, 7, 7, 1, 0, b), 10)
+
+    def test_evaluate_direction_two_stones_open(self):
+        b = Board()
+        b.set(8, 7, 1)
+        b.set(9, 7, 1)
+        self.assertEqual(_evaluate_direction(1, 7, 7, 1, 0, b), 200)
+
+    def test_evaluate_direction_one_end_blocked_by_opponent(self):
+        b = Board()
+        b.set(8, 7, 1)
+        b.set(9, 7, 2)
+        self.assertEqual(_evaluate_direction(1, 7, 7, 1, 0, b), 3)
+
+    def test_evaluate_direction_one_end_blocked_by_edge(self):
+        b = Board()
+        b.set(1, 0, 1)
+        self.assertEqual(_evaluate_direction(1, 0, 0, 1, 0, b), 3)
+
+    def test_evaluate_direction_opponent_only(self):
+        b = Board()
+        b.set(8, 7, 2)
+        self.assertEqual(_evaluate_direction(1, 7, 7, 1, 0, b), 0)
+
+    def test_evaluate_direction_three_open(self):
+        b = Board()
+        b.set(8, 7, 1)
+        b.set(9, 7, 1)
+        b.set(10, 7, 1)
+        self.assertEqual(_evaluate_direction(1, 7, 7, 1, 0, b), 3000)
+
+    # --- _evaluate_potential ---
+    def test_evaluate_potential_empty(self):
+        b = Board()
+        self.assertEqual(_evaluate_potential(1, 7, 7, b), 0)
+
+    def test_evaluate_potential_horizontal_only(self):
+        b = Board()
+        b.set(8, 7, 1)
+        expected = _evaluate_direction(1, 7, 7, 1, 0, b)
+        self.assertEqual(_evaluate_potential(1, 7, 7, b), expected)
+
+    def test_evaluate_potential_vertical(self):
+        b = Board()
+        b.set(7, 8, 1)
+        b.set(7, 9, 1)
+        expected = _evaluate_direction(1, 7, 7, 1, 0, b) + _evaluate_direction(1, 7, 7, 0, 1, b)
+        self.assertEqual(_evaluate_potential(1, 7, 7, b), expected)
+
+    def test_evaluate_potential_cross_shape(self):
+        b = Board()
+        b.set(8, 7, 1)
+        b.set(6, 7, 1)
+        b.set(7, 8, 1)
+        expected = (
+            _evaluate_direction(1, 7, 7, 1, 0, b) +
+            _evaluate_direction(1, 7, 7, 0, 1, b) +
+            _evaluate_direction(1, 7, 7, 1, 1, b) +
+            _evaluate_direction(1, 7, 7, 1, -1, b)
+        )
+        self.assertEqual(_evaluate_potential(1, 7, 7, b), expected)
+
+    # --- _has_immediate_five ---
+    def test_has_immediate_five_function_four_in_row(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        self.assertTrue(_has_immediate_five(b, 1))
+        self.assertFalse(_has_immediate_five(b, 2))
+
+    def test_has_immediate_five_function_not_present(self):
+        b = Board()
+        for x in range(3):
+            b.set(x, 7, 1)
+        self.assertFalse(_has_immediate_five(b, 1))
+
+    def test_has_immediate_five_function_multi_cell_check(self):
+        b = Board()
+        b.set(0, 0, 1)
+        b.set(0, 1, 1)
+        b.set(0, 2, 1)
+        b.set(0, 3, 1)
+        self.assertTrue(_has_immediate_five(b, 1))
+
+    def test_has_immediate_five_function_with_gap(self):
+        b = Board()
+        b.set(0, 0, 1)
+        b.set(1, 0, 1)
+        b.set(2, 0, 1)
+        b.set(4, 0, 1)
+        self.assertTrue(_has_immediate_five(b, 1))
+        self.assertFalse(_has_immediate_five(b, 2))
+
+    def test_has_immediate_five_function_both_players(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        for x in range(4):
+            b.set(x, 8, 2)
+        self.assertTrue(_has_immediate_five(b, 1))
+        self.assertTrue(_has_immediate_five(b, 2))
 
 
 if __name__ == '__main__':

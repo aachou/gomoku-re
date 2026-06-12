@@ -1,6 +1,9 @@
 import unittest
 from gomoku.game import Game
-from gomoku.ai import select_ai_move, select_ai_replacement
+from gomoku.ai import (
+    select_ai_move, select_ai_replacement,
+    _light_score, _score_all_moves, _simulate_placement,
+)
 from gomoku.board import Board
 
 
@@ -169,6 +172,113 @@ class TestAI(unittest.TestCase):
         self.assertIsNone(move)
         move = select_ai_move(b, 1, 'hard')
         self.assertIsNone(move)
+
+
+class TestAIInternals(unittest.TestCase):
+    # --- _light_score ---
+    def test_light_score_empty_board(self):
+        b = Board()
+        score = _light_score(b, 1, 7, 7)
+        self.assertIsInstance(score, (int, float))
+        self.assertGreaterEqual(score, 0)
+
+    def test_light_score_bonus_for_five(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        score = _light_score(b, 1, 4, 7)
+        self.assertGreaterEqual(score, 50000)
+
+    def test_light_score_no_bonus_without_five(self):
+        b = Board()
+        for x in range(3):
+            b.set(x, 7, 1)
+        score = _light_score(b, 1, 4, 7)
+        self.assertLess(score, 50000)
+
+    def test_light_score_center_higher_than_edge(self):
+        b = Board()
+        b.set(7, 6, 1)
+        b.set(7, 8, 2)
+        center = _light_score(b, 1, 7, 7)
+        corner = _light_score(b, 1, 0, 0)
+        self.assertGreater(center, corner)
+
+    # --- _score_all_moves ---
+    def test_score_all_moves_empty_board(self):
+        b = Board()
+        scored = _score_all_moves(b, 1)
+        self.assertEqual(len(scored), 225)
+        for score, x, y in scored:
+            self.assertIsInstance(score, float)
+            self.assertTrue(b.in_bounds(x, y))
+
+    def test_score_all_moves_returns_sorted(self):
+        b = Board()
+        b.set(7, 7, 1)
+        scored = _score_all_moves(b, 2)
+        for i in range(len(scored) - 1):
+            self.assertGreaterEqual(scored[i][0], scored[i + 1][0])
+
+    def test_score_all_moves_early_return_on_win(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 1)
+        scored = _score_all_moves(b, 1)
+        self.assertEqual(len(scored), 1)
+        self.assertEqual((scored[0][1], scored[0][2]), (4, 7))
+
+    def test_score_all_moves_defensive_bonus_when_opponent_threatens(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 7, 2)
+        scored = _score_all_moves(b, 1)
+        blocking_found = any((x, y) == (4, 7) for _, x, y in scored)
+        self.assertTrue(blocking_found)
+
+    def test_score_all_moves_no_moves(self):
+        b = Board(5)
+        for y in range(5):
+            for x in range(5):
+                b.set(x, y, 1 if (x + y) % 2 == 0 else 2)
+        scored = _score_all_moves(b, 1)
+        self.assertEqual(len(scored), 0)
+
+    # --- _simulate_placement ---
+    def test_simulate_placement_no_line(self):
+        b = Board()
+        b.set(7, 8, 2)
+        sim = _simulate_placement(b, 1, 7, 7, 'hard')
+        self.assertEqual(sim.get(7, 7), 1)
+        self.assertIsNot(b, sim)
+
+    def test_simulate_placement_with_line_and_replacement(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 0, 1)
+        b.set(5, 0, 2)
+        b.set(6, 0, 2)
+        sim = _simulate_placement(b, 1, 4, 0, 'hard')
+        self.assertIsInstance(sim, Board)
+        self.assertTrue(sim.is_empty(4, 0))
+
+    def test_simulate_placement_original_unchanged(self):
+        b = Board()
+        for x in range(4):
+            b.set(x, 0, 1)
+        b.set(5, 0, 2)
+        original = b.clone()
+        _simulate_placement(b, 1, 4, 0, 'hard')
+        self.assertEqual(b.grid, original.grid)
+
+    def test_simulate_placement_no_candidates(self):
+        b = Board()
+        for x in range(5):
+            b.set(x, 0, 1)
+        b.set(0, 1, 2)
+        sim = _simulate_placement(b, 1, 2, 0, 'hard')
+        self.assertIsInstance(sim, Board)
+        self.assertTrue(sim.is_empty(2, 0))
 
 
 if __name__ == '__main__':

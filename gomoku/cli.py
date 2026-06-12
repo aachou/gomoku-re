@@ -173,15 +173,12 @@ def input_replacement(game: Game) -> Optional[Tuple[int, int]]:
 
 
 def _handle_line_loop(game: Game, x: int, y: int) -> bool:
-    if not game.place_stone(x, y):
+    result = game.do_placement(x, y)
+    if result is None:
         return False
     game.board.render()
     print(f'{PLAYER_NAMES[game.current]} 放置棋子: {chr(ord("A") + x)}{y + 1}')
-    result = game.process_stone_placement(x, y)
-    game.log_move('place', x, y, result.recovered or 0)
-    while True:
-        if result.result == 'no_line':
-            break
+    while result.result == 'recovered':
         print(f'{PLAYER_NAMES[game.current]} 连成五子，回收 {result.recovered} 颗棋子！')
         game.board.render()
         if not result.can_replace:
@@ -200,7 +197,6 @@ def _handle_line_loop(game: Game, x: int, y: int) -> bool:
             break
         print(f'{PLAYER_NAMES[game.current]} 替换了 {chr(ord("A") + rx)}{ry + 1}')
         game.board.render()
-        x, y = rx, ry
     return not game.has_lost(game.current)
 
 

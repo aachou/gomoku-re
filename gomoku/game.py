@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from typing import Any, Dict, List, NamedTuple, Optional
 
 from .board import Board, BOARD_SIZE
@@ -109,13 +110,30 @@ class Game:
         self.move_log: List[dict] = []
         self.timers: Dict[int, float] = {1: 0.0, 2: 0.0}
         self._turn_start: float = 0.0
+        self._replay_snapshots: List[dict] = []
+
+    def save_replay_snapshot(self):
+        self._replay_snapshots.append({
+            'grid': [row.copy() for row in self.board.grid],
+            'supply': self.supply.copy(),
+            'current': self.current,
+            'move_log': [dict(m) for m in self.move_log],
+            'timers': self.timers.copy(),
+        })
+
+    def restore_replay_snapshot(self, snapshot: dict):
+        self.board.grid = [row.copy() for row in snapshot['grid']]
+        self.board._rebuild_cache()
+        self.supply = snapshot['supply'].copy()
+        self.current = snapshot['current']
+        self.move_log = [dict(m) for m in snapshot['move_log']]
+        if 'timers' in snapshot:
+            self.timers = snapshot['timers'].copy()
 
     def start_turn_timer(self):
-        import time
         self._turn_start = time.time()
 
     def stop_turn_timer(self):
-        import time
         self.timers[self.current] += time.time() - self._turn_start
 
     def log_move(self, action: str, x: int, y: int, recovered: int = 0):
@@ -150,7 +168,7 @@ class Game:
     def serialize(self) -> dict:
         return {
             'size': self.size,
-            'grid': self.board.grid,
+            'grid': [row.copy() for row in self.board.grid],
             'supply': [self.supply[1], self.supply[2]],
             'current': self.current,
             'player_types': [self.player_types[1], self.player_types[2]],
@@ -158,6 +176,7 @@ class Game:
             'move_log': self.move_log,
             'timers': [self.timers[1], self.timers[2]],
             'history': self._history,
+            'replay_snapshots': self._replay_snapshots,
         }
 
     @classmethod
@@ -176,6 +195,8 @@ class Game:
             game.timers = {1: data['timers'][0], 2: data['timers'][1]}
         if 'history' in data:
             game._history = data['history']
+        if 'replay_snapshots' in data:
+            game._replay_snapshots = data['replay_snapshots']
         return game
 
     def has_lost(self, player):

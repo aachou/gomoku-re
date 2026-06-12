@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 DIRECTIONS = [(1, 0), (0, 1), (1, 1), (1, -1)]
 BOARD_SIZE = 15
@@ -93,7 +93,7 @@ class Board:
         self._empty_cells: Set[Tuple[int, int]] = {(x, y) for y in range(size) for x in range(size)}
         self._stone_count: List[int] = [0, 0, 0]
         self._player_cells: Dict[int, Set[Tuple[int, int]]] = {1: set(), 2: set()}
-        self._cell_potential: Dict[Tuple[int, int], List[int]] = {}
+        self._cell_potential: List[List[Optional[List[int]]]] = [[None] * size for _ in range(size)]
         self._board_potential: List[int] = [0, 0, 0]
         self._five_threat_cache: Dict[int, Optional[bool]] = {1: None, 2: None}
         self._init_potential_cache()
@@ -103,8 +103,9 @@ class Board:
         self._stone_count = [0, 0, 0]
         self._player_cells = {1: set(), 2: set()}
         for y in range(self.size):
+            grid_row = self.grid[y]
             for x in range(self.size):
-                v = self.grid[y][x]
+                v = grid_row[x]
                 if v == 0:
                     self._empty_cells.add((x, y))
                 else:
@@ -119,20 +120,26 @@ class Board:
         return self._five_threat_cache[player]
 
     def _init_potential_cache(self):
-        self._cell_potential.clear()
         self._board_potential = [0, 0, 0]
-        for x, y in self._empty_cells:
-            s1 = _evaluate_potential(1, x, y, self)
-            s2 = _evaluate_potential(2, x, y, self)
-            self._cell_potential[(x, y)] = [s1, s2]
-            self._board_potential[1] += s1
-            self._board_potential[2] += s2
+        for y in range(self.size):
+            row = self._cell_potential[y]
+            grid_row = self.grid[y]
+            for x in range(self.size):
+                if grid_row[x] == 0:
+                    s1 = _evaluate_potential(1, x, y, self)
+                    s2 = _evaluate_potential(2, x, y, self)
+                    row[x] = [s1, s2]
+                    self._board_potential[1] += s1
+                    self._board_potential[2] += s2
+                else:
+                    row[x] = None
 
     def _recalc_cell_potential(self, x, y):
-        old_s1, old_s2 = self._cell_potential.get((x, y), (0, 0))
+        old = self._cell_potential[y][x]
+        old_s1, old_s2 = old if old is not None else (0, 0)
         new_s1 = _evaluate_potential(1, x, y, self)
         new_s2 = _evaluate_potential(2, x, y, self)
-        self._cell_potential[(x, y)] = [new_s1, new_s2]
+        self._cell_potential[y][x] = [new_s1, new_s2]
         self._board_potential[1] += new_s1 - old_s1
         self._board_potential[2] += new_s2 - old_s2
 
@@ -161,15 +168,16 @@ class Board:
             return old
         self.grid[y][x] = value
 
-        key = (x, y)
         if old == 0:
-            s1, s2 = self._cell_potential.pop(key, (0, 0))
-            self._board_potential[1] -= s1
-            self._board_potential[2] -= s2
+            old_pot = self._cell_potential[y][x]
+            if old_pot is not None:
+                self._board_potential[1] -= old_pot[0]
+                self._board_potential[2] -= old_pot[1]
+            self._cell_potential[y][x] = None
         if value == 0:
             s1 = _evaluate_potential(1, x, y, self)
             s2 = _evaluate_potential(2, x, y, self)
-            self._cell_potential[key] = [s1, s2]
+            self._cell_potential[y][x] = [s1, s2]
             self._board_potential[1] += s1
             self._board_potential[2] += s2
 
@@ -208,16 +216,22 @@ class Board:
         return not self._empty_cells
 
     def scan_line(self, x, y, dx, dy, player):
-        coords = [(x, y)]
+        left = []
+        right = []
         for sign in (-1, 1):
             step = 1
             cx, cy = x + dx * sign, y + dy * sign
             while self.in_bounds(cx, cy) and self.grid[cy][cx] == player:
-                coords.append((cx, cy))
+                if sign == -1:
+                    left.append((cx, cy))
+                else:
+                    right.append((cx, cy))
                 step += 1
                 cx, cy = x + dx * step * sign, y + dy * step * sign
-        coords.sort(key=lambda p: (p[0] - x) * dx + (p[1] - y) * dy)
-        return coords
+        left.reverse()
+        left.append((x, y))
+        left.extend(right)
+        return left
 
     def find_connected_line(self, x, y, player) -> Optional[List[Tuple[int, int]]]:
         for dx, dy in DIRECTIONS:
@@ -242,7 +256,7 @@ class Board:
         clone._empty_cells = self._empty_cells.copy()
         clone._stone_count = self._stone_count.copy()
         clone._player_cells = {1: self._player_cells[1].copy(), 2: self._player_cells[2].copy()}
-        clone._cell_potential = {k: v.copy() for k, v in self._cell_potential.items()}
+        clone._cell_potential = [[v.copy() if v is not None else None for v in row] for row in self._cell_potential]
         clone._board_potential = self._board_potential.copy()
         clone._five_threat_cache = {1: self._five_threat_cache[1], 2: self._five_threat_cache[2]}
         return clone

@@ -67,6 +67,11 @@ if tk is not None:
             self._in_game = False
             self._highlight_cells = []
             self._ai_job = None
+            self._ghost_stone_id = None
+            self.replay_mode = False
+            self.replay_index = 0
+            self._live_state = None
+            self.replay_timer_job = None
             self._start_canvas = None
             self.buttons = []
             self.level_var.set(config.get('ai_level', 'medium'))
@@ -230,6 +235,10 @@ if tk is not None:
                 self._stones_dirty = True
                 self._highlight_cells = []
                 self._in_game = True
+                self.replay_mode = False
+                self.replay_index = 0
+                self._live_state = None
+                self._cancel_replay_timer()
                 self.build_game_ui()
                 self.update_ui()
                 self._refresh_log(full=True)
@@ -407,6 +416,12 @@ if tk is not None:
             self._paused = False
             self._in_game = True
             self._cancel_ai()
+            self.game._replay_snapshots.clear()
+            self.game.save_replay_snapshot()
+            self.replay_mode = False
+            self.replay_index = 0
+            self._live_state = None
+            self._cancel_replay_timer()
             new_theme = self.theme_var.get()
             if new_theme != self._theme_name:
                 self._apply_theme(new_theme)
@@ -450,11 +465,14 @@ if tk is not None:
             self.canvas.pack(fill='both', expand=True)
             self.canvas.bind('<Button-1>', self.on_canvas_click)
             self.canvas.bind('<Configure>', lambda e: self.draw_board())
+            self.canvas.bind('<Motion>', self._on_canvas_motion)
+            self.canvas.bind('<Leave>', lambda e: self._remove_ghost_stone())
             self.cell_size = 24
 
             side_panel = tk.Frame(center_frame, bg=self.card_bg, bd=0, highlightthickness=1, highlightbackground='#cbd5e1', width=220)
             side_panel.pack(side='right', fill='y', padx=(8, 0))
             side_panel.pack_propagate(False)
+            self.side_panel = side_panel
 
             tk.Label(side_panel, text='步数历史', font=self.header_font, bg=self.card_bg, fg=self.text_main).pack(pady=(10, 4))
 
@@ -486,6 +504,7 @@ if tk is not None:
             tk.Button(footer, text='↶ 悔棋', command=self.perform_undo, font=self.button_font, bg=self.accent, fg='white', activebackground='#5b21b6', activeforeground='white', relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='⛶ 全屏', command=self.toggle_fullscreen, font=self.button_font, bg=self.accent_soft, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='↻ 重新开始', command=self._restart_game, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
+            tk.Button(footer, text='⟳ 回放', command=self._enter_replay_mode, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='📊 统计', command=self._show_stats_dialog, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
             tk.Button(footer, text='← 主菜单', command=self._confirm_back_to_menu, font=self.button_font, bg=self.surface_bg, fg=self.text_main, activebackground=self.panel_bg, activeforeground=self.text_main, relief='flat', padx=20, pady=12).pack(side='left', padx=10)
 
@@ -559,6 +578,19 @@ if tk is not None:
             for j in range(rows):
                 y = self.board_offset_y + j * self.cell_size + self.cell_size // 2
                 self.canvas.create_text(self.board_offset_x - off, y, text=str(j + 1), font=(self.ui_font, fs), fill='#475569', tags='grid')
+            self._draw_star_points()
+
+        def _draw_star_points(self):
+            if self.game.size < 15:
+                return
+            points = [(3,3),(3,7),(3,11),(7,3),(7,7),(7,11),(11,3),(11,7),(11,11)]
+            r = max(3, self.cell_size // 6)
+            for sx, sy in points:
+                if sx >= self.game.size or sy >= self.game.size:
+                    continue
+                cx = self.board_offset_x + sx * self.cell_size + self.cell_size // 2
+                cy = self.board_offset_y + sy * self.cell_size + self.cell_size // 2
+                self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill='#475569', outline='', tags='grid')
 
         def _draw_stones(self):
             radius = int(self.cell_size * 0.42)
@@ -592,6 +624,7 @@ if tk is not None:
         def draw_board(self):
             if not hasattr(self, 'canvas'):
                 return
+            self._remove_ghost_stone()
             w = self.canvas.winfo_width()
             h = self.canvas.winfo_height()
             if w <= 1 or h <= 1:
@@ -675,7 +708,7 @@ if tk is not None:
             self.log_listbox.see('end')
 
         def on_canvas_click(self, event):
-            if self.game_over or self.game.player_types[self.game.current] == 'ai':
+            if self.game_over or self.replay_mode or self.game.player_types[self.game.current] == 'ai':
                 return
             x = (event.x - getattr(self, 'board_offset_x', 0)) // self.cell_size
             y = (event.y - getattr(self, 'board_offset_y', 0)) // self.cell_size
@@ -689,6 +722,143 @@ if tk is not None:
                 if self.game.board.is_empty(x, y) and self.game.supply[self.game.current] > 0:
                     self.perform_placement(x, y)
                     self.update_ui()
+
+        def _on_canvas_motion(self, event):
+            if self.game_over or self.replay_mode:
+                self._remove_ghost_stone()
+                return
+            if self.game.player_types[self.game.current] == 'ai' or self.waiting_replacement:
+                self._remove_ghost_stone()
+                return
+            x = (event.x - self.board_offset_x) // self.cell_size
+            y = (event.y - self.board_offset_y) // self.cell_size
+            if x < 0 or y < 0 or x >= self.game.size or y >= self.game.size:
+                self._remove_ghost_stone()
+                return
+            if self.game.board.get(x, y) != 0:
+                self._remove_ghost_stone()
+                return
+            cx = self.board_offset_x + x * self.cell_size + self.cell_size // 2
+            cy = self.board_offset_y + y * self.cell_size + self.cell_size // 2
+            radius = int(self.cell_size * 0.42)
+            color = '#1f2937' if self.game.current == 1 else '#f8fafc'
+            self._remove_ghost_stone()
+            self._ghost_stone_id = self.canvas.create_oval(
+                cx - radius, cy - radius, cx + radius, cy + radius,
+                fill=color, outline='', stipple='gray25', tags='ghost'
+            )
+
+        def _remove_ghost_stone(self):
+            if self._ghost_stone_id:
+                try:
+                    self.canvas.delete(self._ghost_stone_id)
+                except Exception:
+                    pass
+                self._ghost_stone_id = None
+
+        def _cancel_replay_timer(self):
+            if self.replay_timer_job:
+                self.root.after_cancel(self.replay_timer_job)
+                self.replay_timer_job = None
+
+        def _enter_replay_mode(self):
+            if len(self.game._replay_snapshots) < 2:
+                self.status_var.set('当前没有可供回放的历史记录。')
+                return
+            self._live_state = self.game.serialize()
+            self.replay_mode = True
+            self.replay_index = 0
+            self._remove_ghost_stone()
+            self._build_replay_controls()
+            self._update_replay_display()
+
+        def _exit_replay_mode(self):
+            self._cancel_replay_timer()
+            self.replay_mode = False
+            if self._live_state:
+                self.game = Game.deserialize(self._live_state)
+                self._live_state = None
+            self.replay_index = 0
+            self.waiting_replacement = False
+            self.game_over = False
+            self.last_move = None
+            self._stones_dirty = True
+            self._highlight_cells = []
+            if hasattr(self, 'replay_ctrl_frame') and self.replay_ctrl_frame:
+                self.replay_ctrl_frame.destroy()
+                self.replay_ctrl_frame = None
+            self.log_listbox.pack(fill='both', expand=True)
+            self.update_ui()
+            self._refresh_log(full=True)
+            self.status_var.set('已退出回放模式。')
+            if self.game.player_types[self.game.current] == 'ai':
+                self._schedule_ai(300)
+
+        def _build_replay_controls(self):
+            if hasattr(self, 'replay_ctrl_frame') and self.replay_ctrl_frame:
+                self.replay_ctrl_frame.destroy()
+            self.log_listbox.pack_forget()
+            self.replay_ctrl_frame = tk.Frame(self.side_panel, bg=self.card_bg)
+            self.replay_ctrl_frame.pack(fill='both', expand=True, padx=8, pady=4)
+            tk.Label(self.replay_ctrl_frame, text='回放模式', font=self.header_font, bg=self.card_bg, fg=self.accent).pack(pady=(4, 8))
+            self.replay_progress_label = tk.Label(self.replay_ctrl_frame, font=self.label_font, bg=self.card_bg, fg=self.text_main)
+            self.replay_progress_label.pack(pady=4)
+            btn_frame = tk.Frame(self.replay_ctrl_frame, bg=self.card_bg)
+            btn_frame.pack(pady=8)
+            tk.Button(btn_frame, text='⏮', command=self._replay_prev, font=self.button_font, bg=self.accent, fg='white', relief='flat', padx=12, pady=8, bd=0, width=3).pack(side='left', padx=4)
+            self.replay_play_btn = tk.Button(btn_frame, text='▶ 播放', command=self._replay_toggle_play, font=self.button_font, bg=self.accent_soft, fg=self.text_main, relief='flat', padx=12, pady=8, bd=0)
+            self.replay_play_btn.pack(side='left', padx=4)
+            tk.Button(btn_frame, text='⏭', command=self._replay_next, font=self.button_font, bg=self.accent, fg='white', relief='flat', padx=12, pady=8, bd=0, width=3).pack(side='left', padx=4)
+            tk.Button(self.replay_ctrl_frame, text='❌ 退出回放', command=self._exit_replay_mode, font=self.button_font, bg=self.surface_bg, fg=self.text_main, relief='flat', padx=16, pady=8, bd=0).pack(pady=(8, 4))
+
+        def _update_replay_display(self):
+            total = len(self.game._replay_snapshots) - 1
+            self.replay_progress_label.config(text=f'第 {self.replay_index} / {total} 手')
+            self.game.restore_replay_snapshot(self.game._replay_snapshots[self.replay_index])
+            self.last_move = None
+            self._stones_dirty = True
+            self.draw_board()
+            self.current_label.config(text=f'当前: {PLAYER_NAMES[self.game.current]}')
+            self.supply_label.config(text=f'黑棋: {self.game.supply[1]}  白棋: {self.game.supply[2]}')
+            self._update_timer_display()
+            self._refresh_log(full=True)
+            self.status_var.set(f'回放 - 第 {self.replay_index} / {total} 手')
+
+        def _replay_prev(self):
+            self._cancel_replay_timer()
+            if self.replay_index > 0:
+                self.replay_index -= 1
+                self._update_replay_display()
+
+        def _replay_next(self):
+            self._cancel_replay_timer()
+            if self.replay_index < len(self.game._replay_snapshots) - 1:
+                self.replay_index += 1
+                self._update_replay_display()
+            else:
+                self.replay_play_btn.config(text='▶ 播放')
+
+        def _replay_toggle_play(self):
+            if self.replay_timer_job:
+                self._cancel_replay_timer()
+                self.replay_play_btn.config(text='▶ 播放')
+                return
+            if self.replay_index >= len(self.game._replay_snapshots) - 1:
+                self.replay_index = 0
+                self._update_replay_display()
+            self.replay_play_btn.config(text='⏸ 暂停')
+            self._replay_auto_step()
+
+        def _replay_auto_step(self):
+            if not self.replay_mode:
+                return
+            if self.replay_index < len(self.game._replay_snapshots) - 1:
+                self.replay_index += 1
+                self._update_replay_display()
+                self.replay_timer_job = self.root.after(800, self._replay_auto_step)
+            else:
+                self.replay_play_btn.config(text='▶ 播放')
+                self.replay_timer_job = None
 
         def perform_undo(self):
             self._cancel_ai()
@@ -713,47 +883,40 @@ if tk is not None:
             if result is None:
                 self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 没有棋子可下！')
                 return
-            self.last_move = (x, y)
-            self._stones_dirty = True
-            self._highlight_color = '#ffdd00'
-            self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 放置 {chr(ord("A") + x)}{y + 1}。')
-            self._refresh_log()
-            self.root.after(200, self._reset_highlight)
-            if result.result == 'recovered':
-                if result.can_replace:
-                    self.waiting_replacement = True
-                    self._highlight_cells = list(self.game.board._player_cells[3 - self.game.current])
-                    self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 连成五子，请选择替换对方棋子。')
-                    self.update_ui()
-                    return
-                self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 连成五子，但没有可替换的对方棋子。')
-            self.conclude_turn()
+            self._after_placement(x, y, result, is_replacement=False)
 
         def perform_replacement(self, x, y):
             result = self.game.do_replacement(x, y)
             if result is None:
                 return
+            self.waiting_replacement = False
+            self._after_placement(x, y, result, is_replacement=True)
+
+        def _after_placement(self, x, y, result, is_replacement):
             self.last_move = (x, y)
             self._stones_dirty = True
             self._highlight_color = '#ffdd00'
-            self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 替换了 {chr(ord("A") + x)}{y + 1}。')
-            self.waiting_replacement = False
+            action = '替换' if is_replacement else '放置'
+            self.status_var.set(f'{PLAYER_NAMES[self.game.current]} {action} {chr(ord("A") + x)}{y + 1}。')
             self._refresh_log()
             self.root.after(200, self._reset_highlight)
             if result.result == 'recovered':
                 if result.can_replace:
                     self.waiting_replacement = True
                     self._highlight_cells = list(self.game.board._player_cells[3 - self.game.current])
-                    self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 再次连成五子，请继续替换。')
+                    msg = '再次连成五子，请继续替换' if is_replacement else '连成五子，请选择替换对方棋子'
+                    self.status_var.set(f'{PLAYER_NAMES[self.game.current]} {msg}。')
                     self.update_ui()
                     return
-                self.status_var.set(f'{PLAYER_NAMES[self.game.current]} 替换后连成五子，但无法继续替换，回合结束。')
+                prefix = '替换后' if is_replacement else ''
+                self.status_var.set(f'{PLAYER_NAMES[self.game.current]} {prefix}连成五子，但没有可替换的对方棋子。')
             self.conclude_turn()
 
         def conclude_turn(self):
             self.game.stop_turn_timer()
             self.update_ui()
             if self.game.has_lost(self.game.current):
+                self.game.save_replay_snapshot()
                 self.game_over = True
                 winner = self.game.opponent()
                 messagebox.showinfo('游戏结束', f'{PLAYER_NAMES[self.game.current]} 棋子用完，{PLAYER_NAMES[winner]} 胜利！')
@@ -764,6 +927,7 @@ if tk is not None:
                     pass
                 return
             if self.game.is_draw():
+                self.game.save_replay_snapshot()
                 self.game_over = True
                 messagebox.showinfo('游戏结束', '棋盘已满，平局！')
                 self._show_game_stats(None)
@@ -773,6 +937,7 @@ if tk is not None:
                     pass
                 return
             self.game.current = self.game.opponent()
+            self.game.save_replay_snapshot()
             self.waiting_replacement = False
             self.update_ui()
             if self.game.player_types[self.game.current] == 'ai':

@@ -396,6 +396,92 @@ class TestGame(unittest.TestCase):
         self.assertEqual(loaded['total_games'], 0)
         self.assertEqual(loaded['wins'][1], 0)
 
+    def test_replay_snapshots_empty_initially(self):
+        g = Game()
+        self.assertEqual(len(g._replay_snapshots), 0)
+
+    def test_save_replay_snapshot(self):
+        g = Game(starting_stones=10)
+        g.place_stone(7, 7)
+        g.save_replay_snapshot()
+        self.assertEqual(len(g._replay_snapshots), 1)
+        snap = g._replay_snapshots[0]
+        self.assertEqual(snap['grid'][7][7], 1)
+        self.assertEqual(snap['supply'][1], 9)
+        self.assertEqual(snap['current'], 1)
+        self.assertEqual(len(snap['move_log']), 0)
+
+    def test_save_replay_snapshot_tracks_multiple(self):
+        g = Game(starting_stones=30)
+        g.place_stone(7, 7)
+        g.current = 2
+        g.save_replay_snapshot()
+        g.place_stone(7, 8)
+        g.current = 1
+        g.save_replay_snapshot()
+        self.assertEqual(len(g._replay_snapshots), 2)
+        self.assertEqual(g._replay_snapshots[0]['current'], 2)
+        self.assertEqual(g._replay_snapshots[0]['supply'][1], 29)
+        self.assertEqual(g._replay_snapshots[1]['current'], 1)
+        self.assertEqual(g._replay_snapshots[1]['grid'][8][7], 2)
+
+    def test_restore_replay_snapshot(self):
+        g = Game(starting_stones=30)
+        g.place_stone(7, 7)
+        g.current = 2
+        g.save_replay_snapshot()
+        g.place_stone(9, 9)
+        g.current = 1
+        g.restore_replay_snapshot(g._replay_snapshots[0])
+        self.assertEqual(g.current, 2)
+        self.assertEqual(g.board.get(7, 7), 1)
+        self.assertTrue(g.board.is_empty(9, 9))
+        self.assertEqual(g.supply[1], 29)
+        self.assertEqual(g.supply[2], 30)
+
+    def test_restore_replay_snapshot_mutates_grid_independently(self):
+        g = Game(starting_stones=30)
+        g.save_replay_snapshot()
+        g.place_stone(7, 7)
+        g.save_replay_snapshot()
+        grid_before = [row.copy() for row in g.board.grid]
+        g.restore_replay_snapshot(g._replay_snapshots[0])
+        self.assertTrue(g.board.is_empty(7, 7))
+        grid_before[7][7] = 0
+        for y in range(g.size):
+            for x in range(g.size):
+                self.assertEqual(g.board.grid[y][x], grid_before[y][x])
+
+    def test_replay_snapshots_in_serialize(self):
+        g = Game()
+        g.save_replay_snapshot()
+        g.place_stone(7, 7)
+        g.current = 2
+        g.save_replay_snapshot()
+        data = g.serialize()
+        self.assertIn('replay_snapshots', data)
+        self.assertEqual(len(data['replay_snapshots']), 2)
+
+    def test_replay_snapshots_restored_on_deserialize(self):
+        g = Game()
+        g.save_replay_snapshot()
+        g.place_stone(7, 7)
+        g.current = 2
+        g.save_replay_snapshot()
+        data = g.serialize()
+        g2 = Game.deserialize(data)
+        self.assertEqual(len(g2._replay_snapshots), 2)
+        self.assertEqual(g2._replay_snapshots[0]['current'], 1)
+        self.assertEqual(g2._replay_snapshots[1]['current'], 2)
+
+    def test_replay_snapshots_restore_timers(self):
+        g = Game()
+        g.timers = {1: 10.0, 2: 5.0}
+        g.save_replay_snapshot()
+        g.restore_replay_snapshot(g._replay_snapshots[0])
+        self.assertEqual(g.timers[1], 10.0)
+        self.assertEqual(g.timers[2], 5.0)
+
     def test_stats_persistence(self):
         from gomoku.game import save_stats, load_stats, compute_game_stats
         g = Game()
